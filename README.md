@@ -45,8 +45,6 @@ out of the box.
 
 ## Prototype screenshots
 
-> Add the images listed below to [`docs/screenshots/`](docs/screenshots/) with these file names.
-
 | Welcome and invite code | Explore | For you |
 |---|---|---|
 | ![Welcome](docs/screenshots/welcome.png) | ![Explore](docs/screenshots/explore.png) | ![For you](docs/screenshots/for-you.png) |
@@ -54,10 +52,6 @@ out of the box.
 | Event detail | Event chat | Friends |
 |---|---|---|
 | ![Event detail](docs/screenshots/event-detail.png) | ![Event chat](docs/screenshots/chat.png) | ![Friends](docs/screenshots/friends.png) |
-
-| Member profile | Rating | Profile |
-|---|---|---|
-| ![Member profile](docs/screenshots/member.png) | ![Rating](docs/screenshots/rating.png) | ![Profile](docs/screenshots/profile.png) |
 
 ## Accounts, access and ratings
 
