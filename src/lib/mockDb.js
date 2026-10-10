@@ -36,3 +36,13 @@ export function saveMockDb() {
 
 // Small delay so loading states are visible and behave like the real backend.
 export const mockDelay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Forget everything saved in this browser and start again from src/mocks.
+export function resetMockDb() {
+  try {
+    localStorage.removeItem(KEY)
+  } catch {
+    // Nothing saved.
+  }
+  Object.assign(tables, fresh())
+}

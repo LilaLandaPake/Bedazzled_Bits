@@ -439,3 +439,228 @@ export function subscribeToChat(eventId, onMessage) {
   mockChannel.addEventListener('message', listener)
   return () => mockChannel.removeEventListener('message', listener)
 }
+
+// ---------- Members & safety ----------
+
+const SAVE_ERROR = "We couldn't save that. Please try again."
+
+// Another member's profile as seen by `viewerId`. `member` is null when she doesn't exist
+// or has blocked the viewer (blocked members stop seeing each other).
+export async function getMember(viewerId, memberId) {
+  const ctx = await socialContext(viewerId)
+  if (!ctx.me) return { me: null }
+  // Postgres rejects malformed uuids; treat them as "not found".
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(memberId)) {
+    return { me: ctx.me, member: null }
+  }
+
+  let iBlocked = false
+  let blockedMe = false
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('blocks')
+      .select('blocker_id, blocked_id')
+      .or(`and(blocker_id.eq.${viewerId},blocked_id.eq.${memberId}),and(blocker_id.eq.${memberId},blocked_id.eq.${viewerId})`)
+    if (error) throw new Error(NETWORK_ERROR)
+    iBlocked = data.some((b) => b.blocker_id === viewerId)
+    blockedMe = data.some((b) => b.blocker_id === memberId)
+  } else {
+    await mockDelay()
+    iBlocked = mockDb.blocks.some((b) => b.blocker_id === viewerId && b.blocked_id === memberId)
+    blockedMe = mockDb.blocks.some((b) => b.blocker_id === memberId && b.blocked_id === viewerId)
+  }
+
+  const member = blockedMe ? null : await getUser(memberId)
+  if (!member) return { me: ctx.me, member: null }
+
+  const voucher = member.invited_by ? await getUser(member.invited_by).catch(() => null) : null
+  return {
+    me: ctx.me,
+    member,
+    voucher: voucher && !ctx.blocked.has(voucher.id) ? { id: voucher.id, name: voucher.name } : null,
+    isConnected: ctx.friends.has(memberId),
+    iBlocked,
+  }
+}
+
+export async function connectWith(userId, otherId) {
+  const now = new Date().toISOString()
+  const rows = [
+    { user_id: userId, connected_user_id: otherId, created_at: now },
+    { user_id: otherId, connected_user_id: userId, created_at: now },
+  ]
+  if (supabase) {
+    const { error } = await supabase.from('connections').upsert(rows, { ignoreDuplicates: true })
+    if (error) throw new Error(SAVE_ERROR)
+    return
+  }
+  await mockDelay(200)
+  for (const row of rows) {
+    if (!mockDb.connections.some((c) => c.user_id === row.user_id && c.connected_user_id === row.connected_user_id)) {
+      mockDb.connections.push(row)
+    }
+  }
+  saveMockDb()
+}
+
+// Instant, no reason asked. Nothing happens to the blocked member.
+export async function blockUser(blockerId, blockedId) {
+  const row = { blocker_id: blockerId, blocked_id: blockedId, created_at: new Date().toISOString() }
+  if (supabase) {
+    const { error } = await supabase.from('blocks').upsert(row, { ignoreDuplicates: true })
+    if (error) throw new Error(SAVE_ERROR)
+    return
+  }
+  await mockDelay(200)
+  if (!mockDb.blocks.some((b) => b.blocker_id === blockerId && b.blocked_id === blockedId)) mockDb.blocks.push(row)
+  saveMockDb()
+}
+
+export async function unblockUser(blockerId, blockedId) {
+  if (supabase) {
+    const { error } = await supabase.from('blocks').delete().eq('blocker_id', blockerId).eq('blocked_id', blockedId)
+    if (error) throw new Error(SAVE_ERROR)
+    return
+  }
+  await mockDelay(200)
+  mockDb.blocks = mockDb.blocks.filter((b) => !(b.blocker_id === blockerId && b.blocked_id === blockedId))
+  saveMockDb()
+}
+
+// Saved as 'pending'. No automatic sanction.
+export async function reportUser({ reporterId, reportedId, reason, details }) {
+  const row = {
+    id: uuid(),
+    reporter_id: reporterId,
+    reported_id: reportedId,
+    reason,
+    details: details.trim() || null,
+    status: 'pending',
+    created_at: new Date().toISOString(),
+  }
+  if (supabase) {
+    const { error } = await supabase.from('reports').insert(row)
+    if (error) throw new Error("We couldn't send your report. Please try again.")
+    return
+  }
+  await mockDelay()
+  mockDb.reports.push(row)
+  saveMockDb()
+}
+
+// ---------- Ratings ----------
+
+// The women to rate after an event (other attendees, minus blocked) and the answers
+// already given. `answers` maps to_user -> would_go_again.
+export async function getRatingSheet(eventId, userId) {
+  const { me, event } = await getEvent(eventId, userId)
+  if (!me || !event) return { me, event }
+
+  let existing
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('ratings')
+      .select('to_user, would_go_again')
+      .eq('event_id', eventId)
+      .eq('from_user', userId)
+    if (error) throw new Error(NETWORK_ERROR)
+    existing = data
+  } else {
+    existing = mockDb.ratings.filter((r) => r.event_id === eventId && r.from_user === userId)
+  }
+  return {
+    me,
+    event,
+    people: event.attendees.filter((a) => !a.isMe),
+    answers: Object.fromEntries(existing.map((r) => [r.to_user, r.would_go_again])),
+  }
+}
+
+// `answers` maps to_user -> true/false. Private: only the author can see them.
+export async function saveRatings(eventId, fromUser, answers) {
+  const now = new Date().toISOString()
+  const rows = Object.entries(answers).map(([toUser, value]) => ({
+    event_id: eventId,
+    from_user: fromUser,
+    to_user: toUser,
+    would_go_again: value,
+    created_at: now,
+  }))
+  if (!rows.length) return
+  if (supabase) {
+    const { error } = await supabase.from('ratings').upsert(rows, { onConflict: 'event_id,from_user,to_user' })
+    if (error) throw new Error(SAVE_ERROR)
+    return
+  }
+  await mockDelay()
+  for (const row of rows) {
+    const stored = mockDb.ratings.find(
+      (r) => r.event_id === row.event_id && r.from_user === row.from_user && r.to_user === row.to_user,
+    )
+    if (stored) stored.would_go_again = row.would_go_again
+    else mockDb.ratings.push({ id: uuid(), ...row })
+  }
+  saveMockDb()
+}
+
+// ---------- My profile ----------
+
+// Unambiguous characters only (no 0/O, 1/I/L).
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+function newInviteCode(name) {
+  const prefix =
+    name
+      .normalize('NFD')
+      .replace(/[^A-Za-z]/g, '')
+      .toUpperCase()
+      .slice(0, 4) || 'IDWT'
+  const bytes = crypto.getRandomValues(new Uint8Array(4))
+  return `${prefix}-${[...bytes].map((b) => CODE_CHARS[b % CODE_CHARS.length]).join('')}`
+}
+
+// Profile page data: me, my network, my invites (with who used them) and my upcoming events.
+export async function getMyProfile(userId) {
+  const [feed, friends] = await Promise.all([getFeed(userId), getFriends(userId)])
+  if (!feed.me) return { me: null }
+
+  let invites
+  if (supabase) {
+    const { data, error } = await supabase.from('invites').select('*').eq('owner_id', userId)
+    if (error) throw new Error(NETWORK_ERROR)
+    invites = data
+  } else {
+    invites = mockDb.invites.filter((i) => i.owner_id === userId)
+  }
+  const usedBy = await usersByIds(invites.map((i) => i.used_by).filter(Boolean))
+  const names = new Map(usedBy.map((u) => [u.id, u.name]))
+
+  return {
+    me: feed.me,
+    friends,
+    invites: invites
+      .filter((i) => !i.reusable)
+      .map((i) => ({ code: i.code, usedBy: i.used_by ? { id: i.used_by, name: names.get(i.used_by) ?? 'A member' } : null })),
+    invitedCount: invites.filter((i) => i.used_by).length,
+    going: feed.events.filter((e) => e.isGoing),
+  }
+}
+
+// Creates a single-use invite code owned by the user. Returns the code.
+export async function createInvite(user) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const invite = { code: newInviteCode(user.name), owner_id: user.id, used_by: null, reusable: false }
+    if (supabase) {
+      const { error } = await supabase.from('invites').insert(invite)
+      if (!error) return invite.code
+      if (error.code !== '23505') throw new Error("We couldn't create a code. Please try again.") // 23505 = taken
+    } else {
+      await mockDelay(200)
+      if (mockDb.invites.some((i) => i.code === invite.code)) continue
+      mockDb.invites.push(invite)
+      saveMockDb()
+      return invite.code
+    }
+  }
+  throw new Error("We couldn't create a code. Please try again.")
+}
