@@ -2,6 +2,7 @@
 // and against the local mock database otherwise. Errors thrown here have messages that
 // are safe to show to the user.
 import { AREAS } from './constants.js'
+import { distanceKm } from './distance.js'
 import { mockDb, mockDelay, saveMockDb } from './mockDb.js'
 import { supabase } from './supabase.js'
 import { uuid } from './uuid.js'
@@ -130,4 +131,82 @@ export async function joinWithInvite({ code: rawCode, name, role, interests, are
   mockDb.connections.push(...links)
   saveMockDb()
   return user
+}
+
+// ---------- Events ----------
+
+// Events starting today or later (today's are kept so the hackathon itself shows up).
+function startOfToday() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.toISOString()
+}
+
+// Everything the feed needs in one call: the current user and upcoming events, each with
+// attendee count, friends going (blocked members excluded) and distance from the user.
+export async function getFeed(userId) {
+  let me, events, attendances, friendIds, blocks
+
+  if (supabase) {
+    const [meRes, eventsRes, linksRes, blocksRes] = await Promise.all([
+      supabase.from('users').select('*').eq('id', userId).maybeSingle(),
+      supabase.from('events').select('*').gte('starts_at', startOfToday()).order('starts_at'),
+      supabase.from('connections').select('connected_user_id').eq('user_id', userId),
+      supabase.from('blocks').select('*').or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
+    ])
+    const failed = [meRes, eventsRes, linksRes, blocksRes].find((r) => r.error)
+    if (failed) throw new Error(NETWORK_ERROR)
+    me = meRes.data
+    events = eventsRes.data
+    friendIds = linksRes.data.map((l) => l.connected_user_id)
+    blocks = blocksRes.data
+
+    const eventIds = events.map((e) => e.id)
+    const attRes = eventIds.length
+      ? await supabase.from('attendances').select('user_id, event_id').in('event_id', eventIds)
+      : { data: [] }
+    if (attRes.error) throw new Error(NETWORK_ERROR)
+    attendances = attRes.data
+  } else {
+    await mockDelay()
+    me = mockDb.users.find((u) => u.id === userId) ?? null
+    const from = new Date(startOfToday())
+    events = mockDb.events.filter((e) => new Date(e.starts_at) >= from)
+    events.sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+    friendIds = mockDb.connections.filter((c) => c.user_id === userId).map((c) => c.connected_user_id)
+    blocks = mockDb.blocks.filter((b) => b.blocker_id === userId || b.blocked_id === userId)
+    attendances = mockDb.attendances
+  }
+
+  if (!me) return { me: null, events: [] }
+
+  const blocked = new Set(blocks.flatMap((b) => [b.blocker_id, b.blocked_id]))
+  blocked.delete(userId)
+  const friends = new Set(friendIds.filter((id) => !blocked.has(id)))
+
+  // Friend names are needed for the badges.
+  const friendNames = new Map()
+  if (friends.size) {
+    if (supabase) {
+      const { data } = await supabase.from('users').select('id, name').in('id', [...friends])
+      data?.forEach((u) => friendNames.set(u.id, u.name))
+    } else {
+      mockDb.users.filter((u) => friends.has(u.id)).forEach((u) => friendNames.set(u.id, u.name))
+    }
+  }
+
+  const enriched = events.map((event) => {
+    const going = attendances.filter((a) => a.event_id === event.id).map((a) => a.user_id)
+    return {
+      ...event,
+      attendeeCount: going.length,
+      isGoing: going.includes(userId),
+      friendsGoing: going
+        .filter((id) => friends.has(id) && friendNames.has(id))
+        .map((id) => ({ id, name: friendNames.get(id) })),
+      distance_km: distanceKm(me.lat, me.lng, event.lat, event.lng),
+    }
+  })
+
+  return { me, events: enriched }
 }
