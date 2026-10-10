@@ -1,19 +1,56 @@
-import Header from './components/Header.jsx'
-import CounterCard from './components/CounterCard.jsx'
-import BottomNav from './components/BottomNav.jsx'
+import { Route, Routes } from 'react-router-dom'
+import AppShell from './components/AppShell.jsx'
+import RequireUser from './components/RequireUser.jsx'
+import EventChatPage from './features/chat/EventChatPage.jsx'
+import EventDetailPage from './features/events/EventDetailPage.jsx'
+import EventsFeedPage from './features/events/EventsFeedPage.jsx'
+import NewEventPage from './features/events/NewEventPage.jsx'
+import NotFoundPage from './features/NotFoundPage.jsx'
+import OnboardingPage from './features/onboarding/OnboardingPage.jsx'
+import WelcomePage from './features/onboarding/WelcomePage.jsx'
+import ProfilePage from './features/profile/ProfilePage.jsx'
+import UserProfilePage from './features/profile/UserProfilePage.jsx'
+import RatePage from './features/safety/RatePage.jsx'
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-slate-900 flex justify-center items-center">
-      <div className="w-full max-w-md min-h-screen bg-white shadow-2xl flex flex-col justify-between p-4 overflow-hidden">
-        <Header />
+    <Routes>
+      {/* Public, no bottom nav */}
+      <Route element={<AppShell />}>
+        <Route path="/" element={<WelcomePage />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
+      </Route>
 
-        <main className="flex flex-1 flex-col justify-center py-6">
-          <CounterCard />
-        </main>
+      {/* Members only, with bottom nav */}
+      <Route
+        element={
+          <RequireUser>
+            <AppShell withNav />
+          </RequireUser>
+        }
+      >
+        <Route path="/events" element={<EventsFeedPage />} />
+        <Route path="/events/:id" element={<EventDetailPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/u/:id" element={<UserProfilePage />} />
+      </Route>
 
-        <BottomNav />
-      </div>
-    </div>
+      {/* Members only, full-screen flows (forms, chat input bar) */}
+      <Route
+        element={
+          <RequireUser>
+            <AppShell />
+          </RequireUser>
+        }
+      >
+        <Route path="/events/new" element={<NewEventPage />} />
+        <Route path="/events/:id/chat" element={<EventChatPage />} />
+        <Route path="/events/:id/rate" element={<RatePage />} />
+      </Route>
+
+      <Route element={<AppShell />}>
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
   )
 }

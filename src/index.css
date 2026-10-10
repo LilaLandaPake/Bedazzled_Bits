@@ -1,7 +1,42 @@
 @import 'tailwindcss';
 
+/* Nit (dark theme) palette — single source of truth for colors */
+:root {
+  --bg-main: #170a2b;
+  --bg-card: #25143e;
+  --primary: #ff2d9a;
+  --accent-purple: #a78bfa;
+  --accent-gold: #ffb703;
+  --text-main: #fff6ec;
+
+  color-scheme: dark;
+}
+
+/* Expose the palette as Tailwind utilities: bg-main, bg-card, bg-primary,
+   text-accent-purple, border-accent-gold, text-main, etc. */
+@theme inline {
+  --color-main: var(--bg-main);
+  --color-card: var(--bg-card);
+  --color-primary: var(--primary);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-gold: var(--accent-gold);
+  --color-text-main: var(--text-main);
+}
+
 html,
 body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
