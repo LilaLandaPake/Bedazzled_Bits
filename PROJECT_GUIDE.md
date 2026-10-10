@@ -102,7 +102,7 @@ member act only as herself. Seeded demo members have no login.
 The demo invite code `JURY2026` is reusable and shown on the welcome screen.
 
 **Network connections:**
-When User B redeems an invite code owned by User A, a bidirectional connection in the `connections` table is created automatically (`(A, B)` and `(B, A)`). Users can also add connections directly from another member's profile page (`/u/:id`).
+When User B redeems an invite code owned by User A (including the shared demo code `JURY2026`, owned by Lila), a bidirectional connection is created with A only (`(A, B)` and `(B, A)`). Every other friendship needs a **friend request**: one member sends it from the other's profile (`/u/:id`), the other accepts or declines it (on her profile or on the Friends page). If both send one, they become friends at once. Blocking removes a pending request. Only friends can send each other direct messages. Requests live in `friend_requests (from_user, to_user, created_at)`; connections are only created by the server functions in `supabase/migrations/004_friend_requests.sql`.
 
 ## Data model (Supabase)
 

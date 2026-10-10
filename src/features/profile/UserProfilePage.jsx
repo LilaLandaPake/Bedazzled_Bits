@@ -1,4 +1,4 @@
-import { BadgeCheck, Ban, Flag, MapPin, MessageSquare, UserCheck, UserPlus, UserX } from 'lucide-react'
+import { BadgeCheck, Ban, Clock, Flag, MapPin, MessageSquare, UserCheck, UserPlus, UserX } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../../components/ui/Avatar.jsx'
@@ -9,7 +9,14 @@ import { StarSummary } from '../../components/ui/Stars.jsx'
 import { Eyebrow } from '../../components/ui/PageTitle.jsx'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States.jsx'
 import { shortTag } from '../../lib/constants.js'
-import { blockUser, connectWith, getMember, unblockUser } from '../../lib/db.js'
+import {
+  acceptFriendRequest,
+  blockUser,
+  getMember,
+  removeFriendRequest,
+  sendFriendRequest,
+  unblockUser,
+} from '../../lib/db.js'
 import { clearSession, getCurrentUser } from '../../lib/session.js'
 
 // Keyed by id so moving between profiles starts from a clean state.
@@ -100,7 +107,7 @@ function MemberProfile({ id }) {
     )
   }
 
-  const { member, voucher, isConnected, iBlocked, trust } = state
+  const { member, voucher, isConnected, iBlocked, trust, request } = state
 
   return (
     <>
@@ -168,16 +175,55 @@ function MemberProfile({ id }) {
                 <UserCheck size={18} /> In your network
               </p>
             </div>
+          ) : request === 'received' ? (
+            <div className="flex flex-col gap-3 rounded-3xl bg-soft p-5 text-soft-ink">
+              <p className="font-display text-lg font-bold">{member.name} sent you a friend request</p>
+              <p>Friends can message each other and see when the other is going to an event.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  size="md"
+                  loading={busy === 'accept'}
+                  onClick={() => run('accept', () => acceptFriendRequest(me, member.id))}
+                >
+                  Accept
+                </Button>
+                <Button
+                  size="md"
+                  variant="secondary"
+                  loading={busy === 'decline'}
+                  onClick={() => run('decline', () => removeFriendRequest(me, member.id))}
+                >
+                  Decline
+                </Button>
+              </div>
+            </div>
+          ) : request === 'sent' ? (
+            <div className="flex flex-col items-center gap-2">
+              <p className="flex items-center gap-2 font-display text-lg font-bold">
+                <Clock size={20} /> Friend request sent
+              </p>
+              <p className="text-center text-muted">You'll be friends once {member.name} accepts.</p>
+              <Button
+                variant="link"
+                loading={busy === 'cancel'}
+                onClick={() => run('cancel', () => removeFriendRequest(me, member.id))}
+              >
+                Cancel request
+              </Button>
+            </div>
           ) : (
-            <Button
-              full
-              size="lg"
-              icon={UserPlus}
-              loading={busy === 'connect'}
-              onClick={() => run('connect', () => connectWith(me, member.id))}
-            >
-              Add to my network
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                full
+                size="lg"
+                icon={UserPlus}
+                loading={busy === 'request'}
+                onClick={() => run('request', () => sendFriendRequest(me, member.id))}
+              >
+                Send friend request
+              </Button>
+              <p className="text-center text-sm text-muted">Once she accepts, you can message each other.</p>
+            </div>
           )}
         </div>
       )}

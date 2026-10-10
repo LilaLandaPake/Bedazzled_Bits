@@ -110,7 +110,8 @@ Copy `.env.example` to `.env.local`.
    with a username; it is stored as a hidden `<username>@members.idwtga.app` address and no email
    is ever sent.
 3. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql), then
-   [`supabase/migrations/003_auth.sql`](supabase/migrations/003_auth.sql), then [`supabase/seed.sql`](supabase/seed.sql).
+   [`supabase/migrations/003_auth.sql`](supabase/migrations/003_auth.sql), then
+   [`supabase/migrations/004_friend_requests.sql`](supabase/migrations/004_friend_requests.sql), then [`supabase/seed.sql`](supabase/seed.sql).
 4. Put the project URL and anon key in `.env.local` (and in Vercel).
 
 **Already have a database from an earlier version?** Run the migrations you haven't run yet, in
@@ -121,6 +122,7 @@ order, then `seed.sql` again:
 | [`001_figma_handoff.sql`](supabase/migrations/001_figma_handoff.sql) | Event formats and end times, `direct_messages`, new interest names |
 | [`002_star_ratings.sql`](supabase/migrations/002_star_ratings.sql) | 1–5 star ratings |
 | [`003_auth.sql`](supabase/migrations/003_auth.sql) | Username + password accounts and per-member access rules |
+| [`004_friend_requests.sql`](supabase/migrations/004_friend_requests.sql) | Friend requests; invite codes connect you with the inviter only |
 
 `seed.sql` is generated from `src/mocks`. After changing the mocks, run `npm run seed:sql`.
 

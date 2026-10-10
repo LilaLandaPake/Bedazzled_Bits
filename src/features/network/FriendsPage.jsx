@@ -5,7 +5,7 @@ import Avatar from '../../components/ui/Avatar.jsx'
 import Button from '../../components/ui/Button.jsx'
 import PageTitle from '../../components/ui/PageTitle.jsx'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States.jsx'
-import { createInvite, getFriendsOverview } from '../../lib/db.js'
+import { acceptFriendRequest, createInvite, getFriendsOverview, removeFriendRequest } from '../../lib/db.js'
 import { clearSession, getCurrentUser } from '../../lib/session.js'
 import InviteSheet from './InviteSheet.jsx'
 
@@ -20,6 +20,22 @@ export default function FriendsPage() {
   const [inviting, setInviting] = useState(false)
   const [inviteError, setInviteError] = useState('')
   const [newCode, setNewCode] = useState(null)
+  const [busy, setBusy] = useState('')
+  const [requestError, setRequestError] = useState('')
+
+  // Accept, decline or cancel a friend request, then reload the list.
+  async function answer(key, action) {
+    setBusy(key)
+    setRequestError('')
+    try {
+      await action()
+      setAttempt((n) => n + 1)
+    } catch (err) {
+      setRequestError(err.message)
+    } finally {
+      setBusy('')
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -79,7 +95,8 @@ export default function FriendsPage() {
     )
   }
 
-  const { friends, invitesLeft } = state
+  const { friends, invitesLeft, requests } = state
+  const me = getCurrentUser()
   const q = fold(query.trim())
   const visible = q ? friends.filter((f) => fold(f.name).includes(q)) : friends
 
@@ -88,6 +105,66 @@ export default function FriendsPage() {
       {title}
 
       <div className="flex flex-col gap-4">
+        {(requests.incoming.length > 0 || requests.outgoing.length > 0) && (
+          <section className="flex flex-col gap-3" aria-label="Friend requests">
+            <h2 className="font-display text-xl font-bold">
+              Friend requests{requests.incoming.length > 0 && ` (${requests.incoming.length})`}
+            </h2>
+            {requestError && (
+              <p role="alert" className="font-bold text-primary">
+                {requestError}
+              </p>
+            )}
+            {requests.incoming.map((u) => (
+              <div key={u.id} className="flex flex-col gap-3 rounded-3xl bg-soft p-4 text-soft-ink">
+                <Link to={`/u/${u.id}`} className="flex items-center gap-4">
+                  <Avatar name={u.name} size="md" />
+                  <span className="min-w-0">
+                    <span className="block font-display text-xl font-bold">{u.name}</span>
+                    <span>wants to be your friend</span>
+                  </span>
+                </Link>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    size="md"
+                    loading={busy === `accept:${u.id}`}
+                    onClick={() => answer(`accept:${u.id}`, () => acceptFriendRequest(me, u.id))}
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    size="md"
+                    variant="secondary"
+                    loading={busy === `decline:${u.id}`}
+                    onClick={() => answer(`decline:${u.id}`, () => removeFriendRequest(me, u.id))}
+                  >
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {requests.outgoing.map((u) => (
+              <div key={u.id} className="flex items-center gap-4 rounded-3xl border border-line bg-surface p-4">
+                <Link to={`/u/${u.id}`} className="flex min-w-0 flex-1 items-center gap-4">
+                  <Avatar name={u.name} size="md" />
+                  <span className="min-w-0">
+                    <span className="block font-display text-xl font-bold">{u.name}</span>
+                    <span className="text-muted">Waiting for her answer</span>
+                  </span>
+                </Link>
+                <Button
+                  size="sm"
+                  variant="link"
+                  loading={busy === `cancel:${u.id}`}
+                  onClick={() => answer(`cancel:${u.id}`, () => removeFriendRequest(me, u.id))}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ))}
+          </section>
+        )}
+
         {friends.length > 0 && (
           <input
             type="search"
@@ -103,7 +180,7 @@ export default function FriendsPage() {
           <EmptyState
             icon={Users}
             title="No friends yet"
-            message="Vouch for a friend below, or add women you meet from their profile."
+            message="Vouch for a friend below, or send a friend request from the profile of a woman you meet."
           />
         ) : visible.length === 0 ? (
           <EmptyState icon={SearchX} title="No one with that name" message="Check the spelling, or clear the search." />

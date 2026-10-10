@@ -93,7 +93,7 @@ export async function getFriends(userId) {
 }
 
 // Creates the member's login and profile: claims single-use codes and connects her with
-// whoever invited her (and, for the shared demo code, with the inviter's friends).
+// whoever invited her.
 // Returns the new user.
 export async function joinWithInvite({ code: rawCode, username, password, name, role, interests, area }) {
   const code = normalizeCode(rawCode)
@@ -145,13 +145,13 @@ export async function joinWithInvite({ code: rawCode, username, password, name, 
     created_at: new Date().toISOString(),
   }
   const now = user.created_at
-  // The reusable demo code also drops the newcomer into the voucher's circle, so the jury
-  // starts with a network ("For you", Friends, friend badges) instead of a single friend.
-  const circle = invite.owner_id && invite.reusable ? (await getFriends(invite.owner_id)).map((f) => f.id) : []
-  const links = [...new Set([invite.owner_id, ...circle].filter(Boolean))].flatMap((id) => [
-    { user_id: id, connected_user_id: user.id, created_at: now },
-    { user_id: user.id, connected_user_id: id, created_at: now },
-  ])
+  // The inviter becomes her first friend; everyone else through friend requests.
+  const links = invite.owner_id
+    ? [
+        { user_id: invite.owner_id, connected_user_id: user.id, created_at: now },
+        { user_id: user.id, connected_user_id: invite.owner_id, created_at: now },
+      ]
+    : []
 
   await mockDelay()
   mockDb.users.push(user)
@@ -630,9 +630,10 @@ const byDate = (a, b) => new Date(a.starts_at) - new Date(b.starts_at)
 
 // Friends with one line each about why they're in the list, plus how many invites are left.
 export async function getFriendsOverview(userId) {
-  const [net, invites] = await Promise.all([networkData(userId), myInvites(userId)])
+  const [net, invites, ctx] = await Promise.all([networkData(userId), myInvites(userId), socialContext(userId)])
   if (!net.me) return { me: null }
   const { me, friends, attendances, events, people } = net
+  const requests = await getFriendRequests(userId, ctx.blocked)
 
   const eventsOf = (uid) => attendances.filter((a) => a.user_id === uid).map((a) => events.get(a.event_id)).filter(Boolean)
   const mine = new Set(eventsOf(me.id).map((e) => e.id))
@@ -661,7 +662,7 @@ export async function getFriendsOverview(userId) {
       (a.nextEvent && b.nextEvent ? byDate(a.nextEvent, b.nextEvent) : 0) ||
       a.name.localeCompare(b.name),
   )
-  return { me, friends: rows, invitesLeft: invitesLeft(invites) }
+  return { me, friends: rows, invitesLeft: invitesLeft(invites), requests }
 }
 
 // What the user's network has been doing, newest first:
@@ -733,38 +734,129 @@ export async function getMember(viewerId, memberId) {
   const member = blockedMe ? null : await getUser(memberId)
   if (!member) return { me: ctx.me, member: null }
 
-  const [voucher, trust] = await Promise.all([
+  const [voucher, trust, requests] = await Promise.all([
     member.invited_by ? getUser(member.invited_by).catch(() => null) : null,
     getTrust(memberId).catch(() => null),
+    getFriendRequests(viewerId).catch(() => ({ incoming: [], outgoing: [] })),
   ])
+  // 'sent' (waiting for her), 'received' (she asked you) or null.
+  const request = requests.outgoing.some((u) => u.id === memberId)
+    ? 'sent'
+    : requests.incoming.some((u) => u.id === memberId)
+      ? 'received'
+      : null
   return {
     me: ctx.me,
     member,
     trust,
+    request,
     voucher: voucher && !ctx.blocked.has(voucher.id) ? { id: voucher.id, name: voucher.name } : null,
     isConnected: ctx.friends.has(memberId),
     iBlocked,
   }
 }
 
-export async function connectWith(userId, otherId) {
+// ---------- Friend requests ----------
+// Members become friends when one sends a request and the other accepts (or through an
+// invite code). With Supabase, sending and accepting run in server functions.
+
+const isFriend = (a, b) => mockDb.connections.some((c) => c.user_id === a && c.connected_user_id === b)
+const mockBlocked = (a, b) =>
+  mockDb.blocks.some((x) => (x.blocker_id === a && x.blocked_id === b) || (x.blocker_id === b && x.blocked_id === a))
+
+function mockMakeFriends(a, b) {
   const now = new Date().toISOString()
-  const rows = [
-    { user_id: userId, connected_user_id: otherId, created_at: now },
-    { user_id: otherId, connected_user_id: userId, created_at: now },
-  ]
+  if (!isFriend(a, b)) mockDb.connections.push({ user_id: a, connected_user_id: b, created_at: now })
+  if (!isFriend(b, a)) mockDb.connections.push({ user_id: b, connected_user_id: a, created_at: now })
+  mockDb.friend_requests = mockDb.friend_requests.filter(
+    (r) => !((r.from_user === a && r.to_user === b) || (r.from_user === b && r.to_user === a)),
+  )
+}
+
+const REQUEST_ERRORS = {
+  blocked: "You can't send a request to this member.",
+  not_found: "This member isn't available.",
+  no_request: 'This request was cancelled.',
+}
+
+// Returns 'sent', or 'friends' if she had already asked you (you're friends now).
+export async function sendFriendRequest(userId, otherId) {
   if (supabase) {
-    const { error } = await supabase.from('connections').upsert(rows, { ignoreDuplicates: true })
+    const { data, error } = await supabase.rpc('send_friend_request', { p_to: otherId })
+    if (error) throw new Error(REQUEST_ERRORS[error.message] ?? SAVE_ERROR)
+    return data
+  }
+  await mockDelay(200)
+  if (isFriend(userId, otherId)) return 'friends'
+  if (mockBlocked(userId, otherId)) throw new Error(REQUEST_ERRORS.blocked)
+  if (mockDb.friend_requests.some((r) => r.from_user === otherId && r.to_user === userId)) {
+    mockMakeFriends(userId, otherId)
+    saveMockDb()
+    return 'friends'
+  }
+  if (!mockDb.friend_requests.some((r) => r.from_user === userId && r.to_user === otherId)) {
+    mockDb.friend_requests.push({ from_user: userId, to_user: otherId, created_at: new Date().toISOString() })
+  }
+  saveMockDb()
+  return 'sent'
+}
+
+export async function acceptFriendRequest(userId, fromId) {
+  if (supabase) {
+    const { error } = await supabase.rpc('accept_friend_request', { p_from: fromId })
+    if (error) throw new Error(REQUEST_ERRORS[error.message] ?? SAVE_ERROR)
+    return
+  }
+  await mockDelay(200)
+  if (!mockDb.friend_requests.some((r) => r.from_user === fromId && r.to_user === userId)) {
+    throw new Error(REQUEST_ERRORS.no_request)
+  }
+  if (mockBlocked(userId, fromId)) throw new Error(REQUEST_ERRORS.blocked)
+  mockMakeFriends(userId, fromId)
+  saveMockDb()
+}
+
+// Cancels a request you sent, or declines one you received. She isn't notified.
+export async function removeFriendRequest(userId, otherId) {
+  if (supabase) {
+    const { error } = await supabase
+      .from('friend_requests')
+      .delete()
+      .or(`and(from_user.eq.${userId},to_user.eq.${otherId}),and(from_user.eq.${otherId},to_user.eq.${userId})`)
     if (error) throw new Error(SAVE_ERROR)
     return
   }
   await mockDelay(200)
-  for (const row of rows) {
-    if (!mockDb.connections.some((c) => c.user_id === row.user_id && c.connected_user_id === row.connected_user_id)) {
-      mockDb.connections.push(row)
-    }
-  }
+  mockDb.friend_requests = mockDb.friend_requests.filter(
+    (r) => !((r.from_user === userId && r.to_user === otherId) || (r.from_user === otherId && r.to_user === userId)),
+  )
   saveMockDb()
+}
+
+// Pending requests: { incoming: [user], outgoing: [user] }, newest first, blocked members left out.
+export async function getFriendRequests(userId, blocked = new Set()) {
+  let rows
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .or(`from_user.eq.${userId},to_user.eq.${userId}`)
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(NETWORK_ERROR)
+    rows = data
+  } else {
+    rows = mockDb.friend_requests
+      .filter((r) => r.from_user === userId || r.to_user === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  }
+  const otherOf = (r) => (r.from_user === userId ? r.to_user : r.from_user)
+  rows = rows.filter((r) => !blocked.has(otherOf(r)))
+  const people = new Map((await usersByIds([...new Set(rows.map(otherOf))])).map((u) => [u.id, asUser(u)]))
+  const pick = (list) => list.map((r) => people.get(otherOf(r))).filter(Boolean)
+  return {
+    incoming: pick(rows.filter((r) => r.to_user === userId)),
+    outgoing: pick(rows.filter((r) => r.from_user === userId)),
+  }
 }
 
 // Instant, no reason asked. Nothing happens to the blocked member.
@@ -773,11 +865,13 @@ export async function blockUser(blockerId, blockedId) {
   if (supabase) {
     const { error } = await supabase.from('blocks').upsert(row, { ignoreDuplicates: true })
     if (error) throw new Error(SAVE_ERROR)
-    return
+  } else {
+    await mockDelay(200)
+    if (!mockDb.blocks.some((b) => b.blocker_id === blockerId && b.blocked_id === blockedId)) mockDb.blocks.push(row)
+    saveMockDb()
   }
-  await mockDelay(200)
-  if (!mockDb.blocks.some((b) => b.blocker_id === blockerId && b.blocked_id === blockedId)) mockDb.blocks.push(row)
-  saveMockDb()
+  // A pending friend request between them is dropped.
+  await removeFriendRequest(blockerId, blockedId).catch(() => {})
 }
 
 export async function unblockUser(blockerId, blockedId) {

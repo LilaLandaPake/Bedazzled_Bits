@@ -1,6 +1,6 @@
 -- I Don't Want to Go Alone — database schema.
 -- Fresh project: run this in the Supabase SQL editor, then migrations/003_auth.sql
--- (accounts and access rules), then seed.sql.
+-- (accounts and access rules), then migrations/004_friend_requests.sql, then seed.sql.
 -- Existing project: don't run this; run the migrations in order instead.
 
 create table users (
