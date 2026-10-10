@@ -38,8 +38,11 @@ export default function WelcomePage() {
           <ThemeToggle />
         </div>
         <h1 className="font-display text-5xl leading-[1.05] font-extrabold tracking-tight">
-          I don't want to go <span className="text-highlight">alone.</span>
+          Ditto<span className="text-highlight">.</span>
         </h1>
+        <p className="font-display text-2xl leading-snug font-bold">
+          Because you don't want to go <span className="text-highlight">alone.</span>
+        </p>
         <p className="text-lg leading-relaxed">
           Find women to go with to talks, workshops and courses. Every member is vouched for by another member.
         </p>

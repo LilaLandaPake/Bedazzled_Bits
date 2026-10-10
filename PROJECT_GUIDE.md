@@ -1,4 +1,4 @@
-# I Don't Want to Go Alone — project guide
+# Ditto — project guide
 
 Read this file fully before changing anything.
 

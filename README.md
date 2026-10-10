@@ -1,4 +1,4 @@
-# I Don't Want to Go Alone
+# Ditto
 
 A mobile-first web app where women in Barcelona find other women to go with to learning
 events (talks, workshops, courses). Entry is invite-only: every member is vouched for by an
@@ -11,7 +11,7 @@ See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for the product rules, data model and A
 ## What the app does
 
 Many women skip talks, workshops and courses because they would have to walk in alone.
-*I Don't Want to Go Alone* removes that barrier: you see which women you know, or were
+*Ditto* removes that barrier: you see which women you know, or were
 vouched for by, are going, and you can go together.
 
 - **Invite-only community.** You join with a code from an existing member, so every profile

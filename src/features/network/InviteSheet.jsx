@@ -8,7 +8,7 @@ const canShare = () => typeof navigator.share === 'function'
 // Shows a freshly created invite code with a share (or copy) button.
 export default function InviteSheet({ code, onClose }) {
   const [copied, setCopied] = useState(false)
-  const message = `Join me on I Don't Want to Go Alone, so we can go to talks and workshops together! My invite code: ${code} ${window.location.origin}`
+  const message = `Join me on Ditto, so we can go to talks and workshops together! My invite code: ${code} ${window.location.origin}`
 
   async function share() {
     try {
