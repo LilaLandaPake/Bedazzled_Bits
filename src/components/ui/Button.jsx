@@ -13,7 +13,8 @@ const SIZES = {
   sm: 'h-9 px-3 text-sm',
 }
 
-// Renders a <Link> when `to` is given, otherwise a <button>.
+// Renders a <Link> when `to` is given, an external <a> (new tab) when `href` is given,
+// otherwise a <button>.
 export default function Button({
   variant = 'primary',
   size = 'md',
@@ -22,6 +23,7 @@ export default function Button({
   disabled = false,
   icon: Icon,
   to,
+  href,
   type = 'button',
   className = '',
   children,
@@ -42,6 +44,14 @@ export default function Button({
       {children}
     </>
   )
+
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={classes} {...rest}>
+        {content}
+      </a>
+    )
+  }
 
   if (to) {
     return (

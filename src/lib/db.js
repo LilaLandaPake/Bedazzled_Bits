@@ -139,74 +139,193 @@ export async function joinWithInvite({ code: rawCode, name, role, interests, are
 function startOfToday() {
   const d = new Date()
   d.setHours(0, 0, 0, 0)
-  return d.toISOString()
+  return d
 }
 
-// Everything the feed needs in one call: the current user and upcoming events, each with
-// attendee count, friends going (blocked members excluded) and distance from the user.
-export async function getFeed(userId) {
-  let me, events, attendances, friendIds, blocks
-
+// The current user plus who she's connected to and who she has blocked / been blocked by.
+// Blocked members are removed from `friends` and hidden from attendee lists.
+async function socialContext(userId) {
+  let me, friendIds, blocks
   if (supabase) {
-    const [meRes, eventsRes, linksRes, blocksRes] = await Promise.all([
+    const [meRes, linksRes, blocksRes] = await Promise.all([
       supabase.from('users').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('events').select('*').gte('starts_at', startOfToday()).order('starts_at'),
       supabase.from('connections').select('connected_user_id').eq('user_id', userId),
       supabase.from('blocks').select('*').or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
     ])
-    const failed = [meRes, eventsRes, linksRes, blocksRes].find((r) => r.error)
-    if (failed) throw new Error(NETWORK_ERROR)
+    if ([meRes, linksRes, blocksRes].some((r) => r.error)) throw new Error(NETWORK_ERROR)
     me = meRes.data
-    events = eventsRes.data
     friendIds = linksRes.data.map((l) => l.connected_user_id)
     blocks = blocksRes.data
-
-    const eventIds = events.map((e) => e.id)
-    const attRes = eventIds.length
-      ? await supabase.from('attendances').select('user_id, event_id').in('event_id', eventIds)
-      : { data: [] }
-    if (attRes.error) throw new Error(NETWORK_ERROR)
-    attendances = attRes.data
   } else {
-    await mockDelay()
     me = mockDb.users.find((u) => u.id === userId) ?? null
-    const from = new Date(startOfToday())
-    events = mockDb.events.filter((e) => new Date(e.starts_at) >= from)
-    events.sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
     friendIds = mockDb.connections.filter((c) => c.user_id === userId).map((c) => c.connected_user_id)
     blocks = mockDb.blocks.filter((b) => b.blocker_id === userId || b.blocked_id === userId)
-    attendances = mockDb.attendances
   }
-
-  if (!me) return { me: null, events: [] }
-
   const blocked = new Set(blocks.flatMap((b) => [b.blocker_id, b.blocked_id]))
   blocked.delete(userId)
   const friends = new Set(friendIds.filter((id) => !blocked.has(id)))
+  return { me, friends, blocked }
+}
 
-  // Friend names are needed for the badges.
-  const friendNames = new Map()
-  if (friends.size) {
-    if (supabase) {
-      const { data } = await supabase.from('users').select('id, name').in('id', [...friends])
-      data?.forEach((u) => friendNames.set(u.id, u.name))
-    } else {
-      mockDb.users.filter((u) => friends.has(u.id)).forEach((u) => friendNames.set(u.id, u.name))
-    }
+async function usersByIds(ids) {
+  if (!ids.length) return []
+  if (supabase) {
+    const { data, error } = await supabase.from('users').select('*').in('id', ids)
+    if (error) throw new Error(NETWORK_ERROR)
+    return data
+  }
+  const set = new Set(ids)
+  return mockDb.users.filter((u) => set.has(u.id))
+}
+
+// Adds attendeeCount, isGoing, friendsGoing and distance_km to an event.
+function enrich(event, goingIds, ctx, people) {
+  return {
+    ...event,
+    attendeeCount: goingIds.length,
+    isGoing: goingIds.includes(ctx.me.id),
+    friendsGoing: goingIds
+      .filter((id) => ctx.friends.has(id) && people.has(id))
+      .map((id) => ({ id, name: people.get(id).name })),
+    distance_km: distanceKm(ctx.me.lat, ctx.me.lng, event.lat, event.lng),
+  }
+}
+
+// Everything the feed needs in one call: the current user and upcoming events, each
+// enriched as above.
+export async function getFeed(userId) {
+  let events, attendances
+  const ctx = await socialContext(userId)
+  if (!ctx.me) return { me: null, events: [] }
+
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .gte('starts_at', startOfToday().toISOString())
+      .order('starts_at')
+    if (error) throw new Error(NETWORK_ERROR)
+    events = data
+    const ids = events.map((e) => e.id)
+    const att = ids.length ? await supabase.from('attendances').select('user_id, event_id').in('event_id', ids) : { data: [] }
+    if (att.error) throw new Error(NETWORK_ERROR)
+    attendances = att.data
+  } else {
+    await mockDelay()
+    const from = startOfToday()
+    events = mockDb.events
+      .filter((e) => new Date(e.starts_at) >= from)
+      .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+    attendances = mockDb.attendances
   }
 
-  const enriched = events.map((event) => {
-    const going = attendances.filter((a) => a.event_id === event.id).map((a) => a.user_id)
-    return {
-      ...event,
-      attendeeCount: going.length,
-      isGoing: going.includes(userId),
-      friendsGoing: going
-        .filter((id) => friends.has(id) && friendNames.has(id))
-        .map((id) => ({ id, name: friendNames.get(id) })),
-      distance_km: distanceKm(me.lat, me.lng, event.lat, event.lng),
-    }
-  })
+  const friendRows = await usersByIds([...ctx.friends])
+  const people = new Map(friendRows.map((u) => [u.id, u]))
+  const enriched = events.map((event) =>
+    enrich(
+      event,
+      attendances.filter((a) => a.event_id === event.id).map((a) => a.user_id),
+      ctx,
+      people,
+    ),
+  )
+  return { me: ctx.me, events: enriched }
+}
 
-  return { me, events: enriched }
+// One event with its creator and attendee list. `attendees` is only filled once the
+// current user has joined (the guide: the list is revealed after joining).
+// Returns { me, event: null } when the event doesn't exist.
+export async function getEvent(eventId, userId) {
+  const ctx = await socialContext(userId)
+  if (!ctx.me) return { me: null, event: null }
+
+  let event, goingIds
+  if (supabase) {
+    const [eventRes, attRes] = await Promise.all([
+      supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
+      supabase.from('attendances').select('user_id, created_at').eq('event_id', eventId).order('created_at'),
+    ])
+    // An id that isn't a valid uuid makes Postgres error: treat it as "not found".
+    if (eventRes.error?.code === '22P02') return { me: ctx.me, event: null }
+    if (eventRes.error || attRes.error) throw new Error(NETWORK_ERROR)
+    event = eventRes.data
+    goingIds = attRes.data.map((a) => a.user_id)
+  } else {
+    await mockDelay()
+    event = mockDb.events.find((e) => e.id === eventId) ?? null
+    goingIds = mockDb.attendances.filter((a) => a.event_id === eventId).map((a) => a.user_id)
+  }
+  if (!event) return { me: ctx.me, event: null }
+
+  const rows = await usersByIds([...new Set([...goingIds, event.created_by].filter(Boolean))])
+  const people = new Map(rows.map((u) => [u.id, u]))
+  const enriched = enrich(event, goingIds, ctx, people)
+
+  const creator = people.get(event.created_by)
+  enriched.creator = creator && !ctx.blocked.has(creator.id) ? { id: creator.id, name: creator.name } : null
+  enriched.attendees = enriched.isGoing
+    ? goingIds
+        .filter((id) => !ctx.blocked.has(id) && people.has(id))
+        .map((id) => {
+          const u = people.get(id)
+          return { id, name: u.name, role: u.role, isMe: id === userId, isFriend: ctx.friends.has(id) }
+        })
+    : []
+  return { me: ctx.me, event: enriched }
+}
+
+export async function joinEvent(eventId, userId) {
+  const row = { user_id: userId, event_id: eventId, created_at: new Date().toISOString() }
+  if (supabase) {
+    const { error } = await supabase.from('attendances').upsert(row, { ignoreDuplicates: true })
+    if (error) throw new Error("We couldn't save that. Please try again.")
+    return
+  }
+  await mockDelay(200)
+  if (!mockDb.attendances.some((a) => a.user_id === userId && a.event_id === eventId)) {
+    mockDb.attendances.push(row)
+    saveMockDb()
+  }
+}
+
+export async function leaveEvent(eventId, userId) {
+  if (supabase) {
+    const { error } = await supabase.from('attendances').delete().eq('user_id', userId).eq('event_id', eventId)
+    if (error) throw new Error("We couldn't save that. Please try again.")
+    return
+  }
+  await mockDelay(200)
+  mockDb.attendances = mockDb.attendances.filter((a) => !(a.user_id === userId && a.event_id === eventId))
+  saveMockDb()
+}
+
+// Publishes a member's event and signs her up for it. Returns the new event.
+export async function createEvent({ title, description, tags, starts_at, venue, area, url }, userId) {
+  const point = AREAS.find((a) => a.name === area)
+  const event = {
+    id: uuid(),
+    title: title.trim(),
+    description: description.trim(),
+    tags,
+    starts_at,
+    venue: venue.trim() ? `${venue.trim()}, ${area}` : `${area}, Barcelona`,
+    lat: point?.lat ?? null,
+    lng: point?.lng ?? null,
+    url: url || null,
+    created_by: userId,
+    is_user_created: true,
+    created_at: new Date().toISOString(),
+  }
+
+  if (supabase) {
+    const { error } = await supabase.from('events').insert(event)
+    if (error) throw new Error("We couldn't publish your event. Please try again.")
+  } else {
+    await mockDelay()
+    mockDb.events.push(event)
+    saveMockDb()
+  }
+  // The creator wants company, so she's going. Not fatal if it fails.
+  await joinEvent(event.id, userId).catch(() => {})
+  return event
 }
