@@ -8,6 +8,76 @@ existing member. AI recommends events and flags risky chat messages.
 
 See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for the product rules, data model and API contracts.
 
+## What the app does
+
+Many women skip talks, workshops and courses because they would have to walk in alone.
+*I Don't Want to Go Alone* removes that barrier: you see which women you know, or were
+vouched for by, are going, and you can go together.
+
+- **Invite-only community.** You join with a code from an existing member, so every profile
+  shows who vouched for her. Each member can vouch for 3 friends.
+- **Explore events.** An AI-ranked feed of talks, workshops, courses, hackathons and meetups,
+  with friend avatars on each card and a filter by interest.
+- **For you.** One card at a time showing what your network is up to: friends going to events
+  and new members.
+- **Go together.** Join an event to see who else is going, then chat with the group in a
+  realtime event chat, or message a connected member directly.
+- **Publish events.** Members can add their own meetup ideas or external workshops they want
+  company for.
+- **Friends and profiles.** Connect with members from their profile, search your network and
+  see who vouched for whom.
+- **Safety built in.** AI flags risky chat messages with a visible category and reason; block
+  and report are one tap away; after an event you can privately rate whether you'd go with her
+  again.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 19 (JSX), Vite 8, React Router, Tailwind CSS 4, lucide-react icons |
+| Backend | Supabase: Postgres, Auth, Row Level Security and Realtime for chat |
+| AI | Vercel serverless functions (`/api/recommend`, `/api/moderate`) calling Google Gemini (free tier) or Anthropic Claude |
+| Hosting | Vercel |
+| Tooling | npm, oxlint |
+
+Without Supabase credentials the app runs on mock data stored in the browser, so it works
+out of the box.
+
+## Prototype screenshots
+
+> Add the images listed below to [`docs/screenshots/`](docs/screenshots/) with these file names.
+
+| Welcome and invite code | Explore | For you |
+|---|---|---|
+| ![Welcome](docs/screenshots/welcome.png) | ![Explore](docs/screenshots/explore.png) | ![For you](docs/screenshots/for-you.png) |
+
+| Event detail | Event chat | Friends |
+|---|---|---|
+| ![Event detail](docs/screenshots/event-detail.png) | ![Event chat](docs/screenshots/chat.png) | ![Friends](docs/screenshots/friends.png) |
+
+| Member profile | Rating | Profile |
+|---|---|---|
+| ![Member profile](docs/screenshots/member.png) | ![Rating](docs/screenshots/rating.png) | ![Profile](docs/screenshots/profile.png) |
+
+## Accounts, access and ratings
+
+**Accounts**
+- Onboarding adds a "Your login" step (username, password, repeat); sign-in asks for both.
+- Supabase Auth holds passwords; usernames map to hidden `<username>@members.idwtga.app` logins.
+- The session follows the Supabase Auth session; signing out ends it.
+- Mock mode keeps salted password hashes in the browser's mock database.
+
+**Access rules** ([`supabase/migrations/003_auth.sql`](supabase/migrations/003_auth.sql))
+- Replace the open "demo anon access" policies with rules for signed-in members acting as themselves.
+- Chat is only for attendees; DMs are only between friends and never across a block.
+- Only the flag columns of `messages` can be updated; reports are write-only.
+- Server functions: `check_invite`, `username_available`, `join_with_invite`, `member_rating`.
+
+**Star ratings** ([`supabase/migrations/002_star_ratings.sql`](supabase/migrations/002_star_ratings.sql))
+- "How was going to this event with her?" is rated 1–5 stars, anonymously.
+- Rating opens after the event ends (a demo button skips the wait).
+- The average is shown on profiles only once she has 3 ratings; the seed includes demo ratings.
+
 ## Run locally
 
 ```bash
@@ -83,8 +153,3 @@ monthly spend limit on that account.
 npm run lint
 npm run build
 ```
-
-## Stack
-
-React 19 (JSX), Vite 8, Tailwind CSS 4, React Router, Supabase (database + realtime),
-lucide-react icons, Vercel serverless functions calling Gemini or Claude.
