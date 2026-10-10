@@ -27,3 +27,11 @@ export function attendeesText(count) {
   if (!count) return 'Be the first to go'
   return `${count} ${count === 1 ? 'woman is' : 'women are'} going`
 }
+
+// "18:04" for today, "Thu 8 Oct, 18:04" otherwise (Barcelona time).
+export function formatMessageTime(iso) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const time = timeFmt.format(date)
+  return keyFmt.format(date) === keyFmt.format(new Date()) ? time : `${dayFmt.format(date)}, ${time}`
+}

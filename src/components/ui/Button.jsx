@@ -11,6 +11,7 @@ const VARIANTS = {
 const SIZES = {
   md: 'h-12 px-5 text-base',
   sm: 'h-9 px-3 text-sm',
+  icon: 'h-12 w-12 shrink-0',
 }
 
 // Renders a <Link> when `to` is given, an external <a> (new tab) when `href` is given,

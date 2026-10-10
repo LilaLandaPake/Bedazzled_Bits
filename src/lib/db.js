@@ -329,3 +329,113 @@ export async function createEvent({ title, description, tags, starts_at, venue, 
   await joinEvent(event.id, userId).catch(() => {})
   return event
 }
+
+// ---------- Chat ----------
+
+// Mock mode has no server, so live updates are shared between tabs of the same browser.
+const mockChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('idwtga_chat') : null
+
+// The chat for one event: whether the user may take part (only attendees) and the
+// messages, minus those from blocked members. `people` maps user id -> { name }.
+export async function getChat(eventId, userId) {
+  const ctx = await socialContext(userId)
+  if (!ctx.me) return { me: null }
+
+  let event, goingIds, messages
+  if (supabase) {
+    const [eventRes, attRes, msgRes] = await Promise.all([
+      supabase.from('events').select('id, title').eq('id', eventId).maybeSingle(),
+      supabase.from('attendances').select('user_id').eq('event_id', eventId),
+      supabase.from('messages').select('*').eq('event_id', eventId).order('created_at').limit(200),
+    ])
+    if (eventRes.error?.code === '22P02') return { me: ctx.me, event: null }
+    if ([eventRes, attRes, msgRes].some((r) => r.error)) throw new Error(NETWORK_ERROR)
+    event = eventRes.data
+    goingIds = attRes.data.map((a) => a.user_id)
+    messages = msgRes.data
+  } else {
+    await mockDelay()
+    event = mockDb.events.find((e) => e.id === eventId) ?? null
+    goingIds = mockDb.attendances.filter((a) => a.event_id === eventId).map((a) => a.user_id)
+    messages = mockDb.messages
+      .filter((m) => m.event_id === eventId)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }
+  if (!event) return { me: ctx.me, event: null }
+
+  const rows = await usersByIds([...new Set([...goingIds, ...messages.map((m) => m.user_id)])])
+  const people = Object.fromEntries(rows.map((u) => [u.id, { name: u.name }]))
+  return {
+    me: ctx.me,
+    event,
+    isGoing: goingIds.includes(userId),
+    blocked: ctx.blocked,
+    messages: messages.filter((m) => !ctx.blocked.has(m.user_id)),
+    people,
+  }
+}
+
+// Saves a message. The id is created here so the live echo can be matched to it.
+export async function sendMessage(eventId, userId, text) {
+  const message = {
+    id: uuid(),
+    event_id: eventId,
+    user_id: userId,
+    text: text.trim(),
+    flagged: false,
+    flag_category: null,
+    flag_reason: null,
+    created_at: new Date().toISOString(),
+  }
+  if (supabase) {
+    const { error } = await supabase.from('messages').insert(message)
+    if (error) throw new Error('Message not sent.')
+    return message
+  }
+  await mockDelay(150)
+  mockDb.messages.push(message)
+  saveMockDb()
+  mockChannel?.postMessage(message)
+  return message
+}
+
+// Marks a message as flagged by the AI moderator. Returns the updated message.
+export async function flagMessage(message, { category, reason }) {
+  const patch = { flagged: true, flag_category: category, flag_reason: reason }
+  if (supabase) {
+    const { error } = await supabase.from('messages').update(patch).eq('id', message.id)
+    if (error) throw new Error(NETWORK_ERROR)
+  } else {
+    const stored = mockDb.messages.find((m) => m.id === message.id)
+    if (stored) Object.assign(stored, patch)
+    saveMockDb()
+  }
+  const updated = { ...message, ...patch }
+  mockChannel?.postMessage(updated)
+  return updated
+}
+
+// Calls onMessage(message) for every new or updated message in the event's chat.
+// Returns an unsubscribe function.
+export function subscribeToChat(eventId, onMessage) {
+  if (supabase) {
+    const filter = `event_id=eq.${eventId}`
+    const channel = supabase
+      .channel(`chat:${eventId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter }, (p) => onMessage(p.new))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter }, (p) => onMessage(p.new))
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }
+  if (!mockChannel) return () => {}
+  const listener = ({ data }) => {
+    if (data?.event_id !== eventId) return
+    // Keep this tab's copy in sync too.
+    const stored = mockDb.messages.find((m) => m.id === data.id)
+    if (stored) Object.assign(stored, data)
+    else mockDb.messages.push(data)
+    onMessage(data)
+  }
+  mockChannel.addEventListener('message', listener)
+  return () => mockChannel.removeEventListener('message', listener)
+}
