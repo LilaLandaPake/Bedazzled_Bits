@@ -1,9 +1,11 @@
 // Data access for the app. Every function works against Supabase when it's configured
 // and against the local mock database otherwise. Errors thrown here have messages that
 // are safe to show to the user.
-import { AREAS, INVITE_LIMIT, normalizeInterests } from './constants.js'
+import { createAccount, mockCreateCredentials, mockUsernameTaken, normalizeUsername, passwordError, usernameError } from './auth.js'
+import { AREAS, INVITE_LIMIT, MIN_RATINGS_SHOWN, normalizeInterests } from './constants.js'
 import { distanceKm } from './distance.js'
 import { mockDb, mockDelay, saveMockDb } from './mockDb.js'
+import { forgetUser } from './session.js'
 import { supabase } from './supabase.js'
 import { uuid } from './uuid.js'
 
@@ -26,12 +28,13 @@ export async function checkInvite(rawCode) {
   let owner = null
 
   if (supabase) {
-    const { data, error } = await supabase.from('invites').select('*').eq('code', code).maybeSingle()
+    // Checked on the server so visitors can't list other people's codes.
+    const { data, error } = await supabase.rpc('check_invite', { p_code: code })
     if (error) throw new Error(NETWORK_ERROR)
-    invite = data
-    if (invite?.owner_id) {
-      const res = await supabase.from('users').select('id, name').eq('id', invite.owner_id).maybeSingle()
-      owner = res.data
+    if (data?.reason === 'used') throw new Error('This code has already been used. Ask for a new one.')
+    if (data?.ok) {
+      invite = { code, owner_id: data.owner_id, used_by: null, reusable: data.reusable }
+      owner = data.owner_id ? { id: data.owner_id, name: data.owner_name } : null
     }
   } else {
     await mockDelay()
@@ -57,21 +60,17 @@ export async function getUser(id) {
   return asUser(mockDb.users.find((u) => u.id === id) ?? null)
 }
 
-// Returning members: finds members by name (ignoring case and accents) so they can sign
-// back in. There is no real auth in this demo, so this is a lookup, not a password check.
-const fold = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-
-export async function findMembers(name) {
-  const q = fold(name ?? '')
-  if (!q) return []
+// Whether a username is still free. Throws a message for invalid usernames.
+export async function usernameAvailable(raw) {
+  const problem = usernameError(raw)
+  if (problem) throw new Error(problem)
   if (supabase) {
-    // Matching ignores accents, which SQL ilike can't do, so filter the (small) member list here.
-    const { data, error } = await supabase.from('users').select('*').limit(200)
+    const { data, error } = await supabase.rpc('username_available', { p_username: normalizeUsername(raw) })
     if (error) throw new Error(NETWORK_ERROR)
-    return data.filter((u) => fold(u.name) === q).slice(0, 5).map(asUser)
+    return data === true
   }
   await mockDelay(150)
-  return mockDb.users.filter((u) => fold(u.name) === q).slice(0, 5).map(asUser)
+  return !mockUsernameTaken(raw)
 }
 
 // Members connected to `userId`, as user rows.
@@ -93,15 +92,48 @@ export async function getFriends(userId) {
   return mockDb.users.filter((u) => ids.has(u.id)).map(asUser)
 }
 
-// Creates the member, claims the invite and connects her with whoever invited her
-// (both directions). Returns the new user.
-export async function joinWithInvite({ code: rawCode, name, role, interests, area }) {
+// Creates the member's login and profile: claims single-use codes and connects her with
+// whoever invited her (and, for the shared demo code, with the inviter's friends).
+// Returns the new user.
+export async function joinWithInvite({ code: rawCode, username, password, name, role, interests, area }) {
   const code = normalizeCode(rawCode)
-  const { invite } = await checkInvite(code)
+  const problem = usernameError(username) || passwordError(password)
+  if (problem) throw new Error(problem)
   const point = AREAS.find((a) => a.name === area)
 
+  if (supabase) {
+    await checkInvite(code)
+    if (!(await usernameAvailable(username))) throw new Error('That username is taken. Try another one.')
+    const id = await createAccount(username, password)
+    const { data, error } = await supabase.rpc('join_with_invite', {
+      p_code: code,
+      p_username: normalizeUsername(username),
+      p_name: name.trim(),
+      p_role: role.trim(),
+      p_interests: interests,
+      p_area: area,
+      p_lat: point?.lat ?? null,
+      p_lng: point?.lng ?? null,
+    })
+    if (error) {
+      // Leave the login in place: retrying with the same username and password reuses it.
+      await supabase.auth.signOut().catch(() => {})
+      forgetUser()
+      const messages = {
+        used: 'This code has already been used. Ask for a new one.',
+        not_found: "That code doesn't exist. Check it with the person who invited you.",
+        username_taken: 'That username is taken. Try another one.',
+      }
+      throw new Error(messages[error.message] ?? "We couldn't create your profile. Please try again.")
+    }
+    return asUser({ ...data, id })
+  }
+
+  const { invite } = await checkInvite(code)
+  if (mockUsernameTaken(username)) throw new Error('That username is taken. Try another one.')
   const user = {
     id: uuid(),
+    username: normalizeUsername(username),
     name: name.trim(),
     role: role.trim(),
     interests,
@@ -112,7 +144,6 @@ export async function joinWithInvite({ code: rawCode, name, role, interests, are
     is_demo: false,
     created_at: new Date().toISOString(),
   }
-
   const now = user.created_at
   // The reusable demo code also drops the newcomer into the voucher's circle, so the jury
   // starts with a network ("For you", Friends, friend badges) instead of a single friend.
@@ -122,36 +153,11 @@ export async function joinWithInvite({ code: rawCode, name, role, interests, are
     { user_id: user.id, connected_user_id: id, created_at: now },
   ])
 
-  if (supabase) {
-    const { error: userError } = await supabase.from('users').insert(user)
-    if (userError) throw new Error(NETWORK_ERROR)
-
-    if (!invite.reusable) {
-      // Only succeeds if nobody redeemed the code in the meantime.
-      const { data: claimed, error } = await supabase
-        .from('invites')
-        .update({ used_by: user.id })
-        .eq('code', code)
-        .is('used_by', null)
-        .select()
-      if (error || !claimed?.length) {
-        await supabase.from('users').delete().eq('id', user.id)
-        throw new Error(error ? NETWORK_ERROR : 'This code has already been used. Ask for a new one.')
-      }
-    }
-
-    if (links.length) {
-      // A missing connection shouldn't block joining; she can still connect from a profile.
-      await supabase.from('connections').upsert(links, { ignoreDuplicates: true })
-    }
-    return user
-  }
-
   await mockDelay()
   mockDb.users.push(user)
   if (!invite.reusable) mockDb.invites.find((i) => i.code === code).used_by = user.id
   mockDb.connections.push(...links)
-  saveMockDb()
+  await mockCreateCredentials(user.id, username, password)
   return user
 }
 
@@ -727,10 +733,14 @@ export async function getMember(viewerId, memberId) {
   const member = blockedMe ? null : await getUser(memberId)
   if (!member) return { me: ctx.me, member: null }
 
-  const voucher = member.invited_by ? await getUser(member.invited_by).catch(() => null) : null
+  const [voucher, trust] = await Promise.all([
+    member.invited_by ? getUser(member.invited_by).catch(() => null) : null,
+    getTrust(memberId).catch(() => null),
+  ])
   return {
     me: ctx.me,
     member,
+    trust,
     voucher: voucher && !ctx.blocked.has(voucher.id) ? { id: voucher.id, name: voucher.name } : null,
     isConnected: ctx.friends.has(memberId),
     iBlocked,
@@ -804,8 +814,11 @@ export async function reportUser({ reporterId, reportedId, reason, details }) {
 
 // ---------- Ratings ----------
 
-// The women to rate after an event (other attendees, minus blocked) and the answers
-// already given. `answers` maps to_user -> would_go_again.
+// Rating opens once the event has finished (or started, if it has no end time).
+const ratingOpensAt = (event) => new Date(event.ends_at ?? event.starts_at)
+
+// The women to rate after an event (other attendees, minus blocked) and the stars already
+// given. `answers` maps to_user -> 1..5. `opensAt` is when rating becomes possible.
 export async function getRatingSheet(eventId, userId) {
   const { me, event } = await getEvent(eventId, userId)
   if (!me || !event) return { me, event }
@@ -814,7 +827,7 @@ export async function getRatingSheet(eventId, userId) {
   if (supabase) {
     const { data, error } = await supabase
       .from('ratings')
-      .select('to_user, would_go_again')
+      .select('to_user, stars')
       .eq('event_id', eventId)
       .eq('from_user', userId)
     if (error) throw new Error(NETWORK_ERROR)
@@ -822,24 +835,23 @@ export async function getRatingSheet(eventId, userId) {
   } else {
     existing = mockDb.ratings.filter((r) => r.event_id === eventId && r.from_user === userId)
   }
+  const opensAt = ratingOpensAt(event)
   return {
     me,
     event,
+    opensAt,
+    isOpen: Number.isNaN(opensAt.getTime()) || opensAt <= new Date(),
     people: event.attendees.filter((a) => !a.isMe),
-    answers: Object.fromEntries(existing.map((r) => [r.to_user, r.would_go_again])),
+    answers: Object.fromEntries(existing.filter((r) => r.stars).map((r) => [r.to_user, r.stars])),
   }
 }
 
-// `answers` maps to_user -> true/false. Private: only the author can see them.
+// `answers` maps to_user -> 1..5 stars. Individual ratings are never shown to anyone.
 export async function saveRatings(eventId, fromUser, answers) {
   const now = new Date().toISOString()
-  const rows = Object.entries(answers).map(([toUser, value]) => ({
-    event_id: eventId,
-    from_user: fromUser,
-    to_user: toUser,
-    would_go_again: value,
-    created_at: now,
-  }))
+  const rows = Object.entries(answers)
+    .filter(([, stars]) => Number.isInteger(stars) && stars >= 1 && stars <= 5)
+    .map(([toUser, stars]) => ({ event_id: eventId, from_user: fromUser, to_user: toUser, stars, created_at: now }))
   if (!rows.length) return
   if (supabase) {
     const { error } = await supabase.from('ratings').upsert(rows, { onConflict: 'event_id,from_user,to_user' })
@@ -851,10 +863,27 @@ export async function saveRatings(eventId, fromUser, answers) {
     const stored = mockDb.ratings.find(
       (r) => r.event_id === row.event_id && r.from_user === row.from_user && r.to_user === row.to_user,
     )
-    if (stored) stored.would_go_again = row.would_go_again
+    if (stored) stored.stars = row.stars
     else mockDb.ratings.push({ id: uuid(), ...row })
   }
   saveMockDb()
+}
+
+// A member's star rating: { count, average }. `average` is null until she has at least
+// MIN_RATINGS_SHOWN ratings, so nobody can work out who gave which score.
+export async function getTrust(userId) {
+  let stars
+  if (supabase) {
+    // Computed on the server: members can't read other people's individual ratings.
+    const { data, error } = await supabase.rpc('member_rating', { p_user: userId })
+    if (error) throw new Error(NETWORK_ERROR)
+    return { count: Number(data?.count ?? 0), average: data?.average == null ? null : Number(data.average) }
+  } else {
+    stars = mockDb.ratings.filter((r) => r.to_user === userId && r.stars).map((r) => r.stars)
+  }
+  const count = stars.length
+  const average = count >= MIN_RATINGS_SHOWN ? Math.round((stars.reduce((a, b) => a + b, 0) / count) * 10) / 10 : null
+  return { count, average }
 }
 
 // ---------- My profile ----------
@@ -887,7 +916,12 @@ const invitesLeft = (invites) => Math.max(0, INVITE_LIMIT - invites.filter((i) =
 
 // Profile page data: me, my network, my invites (with who used them) and my upcoming events.
 export async function getMyProfile(userId) {
-  const [feed, friends, invites] = await Promise.all([getFeed(userId), getFriends(userId), myInvites(userId)])
+  const [feed, friends, invites, trust] = await Promise.all([
+    getFeed(userId),
+    getFriends(userId),
+    myInvites(userId),
+    getTrust(userId).catch(() => null),
+  ])
   if (!feed.me) return { me: null }
 
   const usedBy = await usersByIds(invites.map((i) => i.used_by).filter(Boolean))
@@ -902,6 +936,7 @@ export async function getMyProfile(userId) {
     invitedCount: invites.filter((i) => i.used_by).length,
     invitesLeft: invitesLeft(invites),
     going: feed.events.filter((e) => e.isGoing),
+    trust,
   }
 }
 

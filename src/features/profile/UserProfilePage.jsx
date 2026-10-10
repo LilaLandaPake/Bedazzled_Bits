@@ -5,6 +5,7 @@ import Avatar from '../../components/ui/Avatar.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { Tag } from '../../components/ui/Chip.jsx'
 import Header from '../../components/ui/Header.jsx'
+import { StarSummary } from '../../components/ui/Stars.jsx'
 import { Eyebrow } from '../../components/ui/PageTitle.jsx'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States.jsx'
 import { shortTag } from '../../lib/constants.js'
@@ -99,7 +100,7 @@ function MemberProfile({ id }) {
     )
   }
 
-  const { member, voucher, isConnected, iBlocked } = state
+  const { member, voucher, isConnected, iBlocked, trust } = state
 
   return (
     <>
@@ -123,6 +124,7 @@ function MemberProfile({ id }) {
                   <MapPin size={16} /> {member.area}
                 </p>
               )}
+              <StarSummary trust={trust} className="mt-1" />
             </div>
           </div>
 

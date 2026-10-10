@@ -29,7 +29,8 @@ ${inserts('connections', mocks.connections)}
 ${inserts('events', mocks.events)}
 ${inserts('attendances', mocks.attendances)}
 ${inserts('messages', mocks.messages)}
-${inserts('direct_messages', mocks.direct_messages)}`
+${inserts('direct_messages', mocks.direct_messages)}
+${inserts('ratings', mocks.ratings)}`
 
 const out = new URL('./seed.sql', import.meta.url)
 writeFileSync(out, sql)

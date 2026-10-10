@@ -256,7 +256,7 @@ export default function EventDetailPage() {
             DEMO
           </span>
           <Link
-            to={`/events/${id}/rate`}
+            to={`/events/${id}/rate?demo=1`}
             className="font-display font-bold text-muted underline decoration-2 underline-offset-4"
           >
             Simulate event finished

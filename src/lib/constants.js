@@ -82,3 +82,7 @@ export const MODERATION_CATEGORIES = [
 ]
 
 export const categoryLabel = (id) => REPORT_CATEGORIES.find((c) => c.id === id)?.label ?? 'Something else'
+
+// A member's star average is shown only once she has this many ratings, so nobody can
+// work out who gave which score.
+export const MIN_RATINGS_SHOWN = 3

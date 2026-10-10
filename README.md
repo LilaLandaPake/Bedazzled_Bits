@@ -42,18 +42,31 @@ Copy `.env.example` to `.env.local`.
 ## Set up Supabase
 
 1. Create a project at supabase.com.
-2. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql), then [`supabase/seed.sql`](supabase/seed.sql).
-3. Put the project URL and anon key in `.env.local` (and in Vercel).
+2. **Authentication → Sign In / Providers → Email:** turn **off** "Confirm email". Members sign in
+   with a username; it is stored as a hidden `<username>@members.idwtga.app` address and no email
+   is ever sent.
+3. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql), then
+   [`supabase/migrations/003_auth.sql`](supabase/migrations/003_auth.sql), then [`supabase/seed.sql`](supabase/seed.sql).
+4. Put the project URL and anon key in `.env.local` (and in Vercel).
 
-**Already have a database from an earlier version?** Run
-[`supabase/migrations/001_figma_handoff.sql`](supabase/migrations/001_figma_handoff.sql) once, then
-`seed.sql` again. It adds event formats and end times, the `direct_messages` table (with realtime),
-and maps old interest tags to the new list.
+**Already have a database from an earlier version?** Run the migrations you haven't run yet, in
+order, then `seed.sql` again:
+
+| File | Adds |
+|---|---|
+| [`001_figma_handoff.sql`](supabase/migrations/001_figma_handoff.sql) | Event formats and end times, `direct_messages`, new interest names |
+| [`002_star_ratings.sql`](supabase/migrations/002_star_ratings.sql) | 1–5 star ratings |
+| [`003_auth.sql`](supabase/migrations/003_auth.sql) | Username + password accounts and per-member access rules |
 
 `seed.sql` is generated from `src/mocks`. After changing the mocks, run `npm run seed:sql`.
 
-> There is no real authentication: the anon key can read and write every table. That is
-> acceptable for the hackathon demo only.
+**Security.** Members sign in with a username and password through Supabase Auth; passwords
+never touch the app's tables. Access rules (`003_auth.sql`) let each member act only as herself:
+post only in chats of events she joined, message only friends, see only her own blocks, invites
+and given ratings. Star averages and invite checks run in server-side functions. Visitors who
+aren't signed in can't read any table. Known limits: the AI safety check runs in the sender's
+browser (it can only ever add a flag), and passwords can't be reset yet. Demo members from
+`seed.sql` have no login.
 
 ## Deploy to Vercel
 

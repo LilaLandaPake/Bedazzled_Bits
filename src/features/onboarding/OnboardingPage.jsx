@@ -8,11 +8,13 @@ import Input from '../../components/ui/Input.jsx'
 import { Eyebrow } from '../../components/ui/PageTitle.jsx'
 import { ErrorState, Loading } from '../../components/ui/States.jsx'
 import { AREAS, INTERESTS } from '../../lib/constants.js'
-import { checkInvite, joinWithInvite } from '../../lib/db.js'
+import { MIN_PASSWORD, passwordError, usernameError } from '../../lib/auth.js'
+import { checkInvite, joinWithInvite, usernameAvailable } from '../../lib/db.js'
 import { getCurrentUser, setCurrentUser } from '../../lib/session.js'
 
 const STEPS = [
   { title: 'About you', intro: 'Tell the other women a little about yourself.' },
+  { title: 'Your login', intro: 'Choose a username and password to sign in with on any device.' },
   { title: 'Your interests', intro: 'Pick as many as you like. We use them to recommend events.' },
   { title: 'Your area', intro: 'Where in Barcelona are you based? We use it to show events near you.' },
 ]
@@ -28,6 +30,11 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
   const [role, setRole] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [password2, setPassword2] = useState('')
+  const [usernameTaken, setUsernameTaken] = useState(false)
+  const [checkingName, setCheckingName] = useState(false)
   const [interests, setInterests] = useState([])
   const [area, setArea] = useState('')
   const [touched, setTouched] = useState(false)
@@ -78,8 +85,14 @@ export default function OnboardingPage() {
     )
   }
 
+  const loginErrors = {
+    username: usernameError(username) || (usernameTaken ? 'That username is taken. Try another one.' : ''),
+    password: passwordError(password),
+    password2: password2 === password ? '' : "The passwords don't match.",
+  }
   const stepErrors = [
     name.trim() ? '' : 'Please enter your name.',
+    loginErrors.username || loginErrors.password || loginErrors.password2,
     interests.length ? '' : 'Pick at least one interest.',
     area ? '' : 'Choose your area.',
   ]
@@ -101,6 +114,22 @@ export default function OnboardingPage() {
     setTouched(true)
     if (stepErrors[step]) return
 
+    // Check the username is free before moving on, so nobody fills in the rest for nothing.
+    if (step === 1) {
+      setCheckingName(true)
+      setSubmitError('')
+      try {
+        const free = await usernameAvailable(username)
+        setUsernameTaken(!free)
+        if (!free) return
+      } catch (err) {
+        setSubmitError(err.message)
+        return
+      } finally {
+        setCheckingName(false)
+      }
+    }
+
     if (step < STEPS.length - 1) {
       setTouched(false)
       setStep(step + 1)
@@ -110,7 +139,7 @@ export default function OnboardingPage() {
     setSubmitting(true)
     setSubmitError('')
     try {
-      const user = await joinWithInvite({ code, name, role, interests, area })
+      const user = await joinWithInvite({ code, username, password, name, role, interests, area })
       setCurrentUser(user.id)
       navigate('/events', { replace: true })
     } catch (err) {
@@ -168,6 +197,43 @@ export default function OnboardingPage() {
       )}
 
       {step === 1 && (
+        <div className="flex flex-col gap-5">
+          <Input
+            label="Username"
+            placeholder="e.g. laura_bcn"
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value)
+              setUsernameTaken(false)
+            }}
+            error={touched ? loginErrors.username : ''}
+            hint="3–20 letters, numbers, dots or underscores. Only used to sign in."
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            maxLength={20}
+          />
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={touched ? loginErrors.password : ''}
+            hint={`At least ${MIN_PASSWORD} characters. It can't be reset yet, so keep it somewhere safe.`}
+            autoComplete="new-password"
+          />
+          <Input
+            label="Repeat password"
+            type="password"
+            value={password2}
+            onChange={(e) => setPassword2(e.target.value)}
+            error={touched && !loginErrors.password ? loginErrors.password2 : ''}
+            autoComplete="new-password"
+          />
+        </div>
+      )}
+
+      {step === 2 && (
         <fieldset className="flex flex-col gap-3">
           <legend className="sr-only">Interests</legend>
           <div className="flex flex-wrap gap-2.5">
@@ -181,7 +247,7 @@ export default function OnboardingPage() {
         </fieldset>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <fieldset className="flex flex-col gap-3">
           <legend className="sr-only">Area</legend>
           <div className="flex flex-wrap gap-2.5">
@@ -201,7 +267,13 @@ export default function OnboardingPage() {
             {submitError}
           </p>
         )}
-        <Button full size="lg" type="submit" loading={submitting} icon={isLast || submitting ? undefined : ArrowRight}>
+        <Button
+          full
+          size="lg"
+          type="submit"
+          loading={submitting || checkingName}
+          icon={isLast || submitting || checkingName ? undefined : ArrowRight}
+        >
           {isLast ? (submitting ? 'Creating your profile…' : 'Join and see events') : 'Next'}
         </Button>
       </div>

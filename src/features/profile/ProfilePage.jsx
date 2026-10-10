@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button.jsx'
 import Card from '../../components/ui/Card.jsx'
 import { Tag } from '../../components/ui/Chip.jsx'
 import PageTitle, { Eyebrow } from '../../components/ui/PageTitle.jsx'
+import { StarSummary } from '../../components/ui/Stars.jsx'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States.jsx'
 import { shortTag } from '../../lib/constants.js'
 import { createInvite, getMyProfile } from '../../lib/db.js'
@@ -99,7 +100,7 @@ export default function ProfilePage() {
     )
   }
 
-  const { me, friends, invites, invitedCount, invitesLeft, going } = state
+  const { me, friends, invites, invitedCount, invitesLeft, going, trust } = state
 
   return (
     <>
@@ -112,6 +113,8 @@ export default function ProfilePage() {
       <div className="flex flex-col gap-7">
         <div className="flex flex-col gap-3">
           {me.role && <p className="text-lg">{me.role}</p>}
+          {me.username && <p className="text-sm text-muted">Signed in as @{me.username}</p>}
+          <StarSummary trust={trust} self />
           <div className="flex flex-wrap gap-2">
             {me.interests.map((t) => (
               <Tag key={t}>{shortTag(t)}</Tag>

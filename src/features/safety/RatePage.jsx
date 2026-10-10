@@ -1,17 +1,22 @@
-import { CheckCircle2, EyeOff, Lock, SearchX, ThumbsDown, ThumbsUp, Users } from 'lucide-react'
+import { CalendarClock, CheckCircle2, EyeOff, Lock, SearchX, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Avatar from '../../components/ui/Avatar.jsx'
 import Button from '../../components/ui/Button.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Header from '../../components/ui/Header.jsx'
+import { StarInput } from '../../components/ui/Stars.jsx'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States.jsx'
 import { getRatingSheet, saveRatings } from '../../lib/db.js'
+import { formatEventDate } from '../../lib/format.js'
 import { clearSession, getCurrentUser } from '../../lib/session.js'
 
 export default function RatePage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  // "Simulate event finished" on the event page opens rating before the event is over.
+  const [params] = useSearchParams()
+  const demo = params.get('demo') === '1'
   const me = getCurrentUser()
   const [state, setState] = useState({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
@@ -109,14 +114,28 @@ export default function RatePage() {
     )
   }
 
+  if (!state.isOpen && !demo) {
+    return (
+      <>
+        {header}
+        <EmptyState
+          icon={CalendarClock}
+          title="Rating opens after the event"
+          message={`Come back after ${formatEventDate(state.opensAt.toISOString())} to rate the women you went with.`}
+          action={<Button to={`/events/${id}`}>Back to the event</Button>}
+        />
+      </>
+    )
+  }
+
   if (saved) {
     return (
       <>
         {header}
         <EmptyState
           icon={CheckCircle2}
-          title="Thanks for your answers"
-          message="They're private. Nobody else can see them."
+          title="Thanks for rating"
+          message="Your stars are anonymous. Members only see their average, once they have 3 or more ratings."
           action={<Button to="/events">Find your next event</Button>}
         />
       </>
@@ -145,7 +164,7 @@ export default function RatePage() {
 
       <h1 className="mb-2 font-display text-3xl leading-tight font-extrabold tracking-tight">{event.title}</h1>
       <p className="mb-5 flex items-center gap-2 text-sm text-muted">
-        <EyeOff size={15} className="shrink-0" /> Private: only you see your answers.
+        <EyeOff size={15} className="shrink-0" /> Anonymous: nobody sees who gave which stars.
       </p>
 
       <ul className="flex flex-col gap-3">
@@ -159,27 +178,12 @@ export default function RatePage() {
                   {p.role && <p className="text-sm text-muted">{p.role}</p>}
                 </div>
               </div>
-              <p className="font-bold">Would you go with her again?</p>
-              <div className="grid grid-cols-2 gap-2" role="group" aria-label={`Would you go with ${p.name} again?`}>
-                <Button
-                  size="sm"
-                  variant={answers[p.id] === true ? 'primary' : 'secondary'}
-                  icon={ThumbsUp}
-                  aria-pressed={answers[p.id] === true}
-                  onClick={() => setAnswers((a) => ({ ...a, [p.id]: true }))}
-                >
-                  Yes
-                </Button>
-                <Button
-                  size="sm"
-                  variant={answers[p.id] === false ? 'primary' : 'secondary'}
-                  icon={ThumbsDown}
-                  aria-pressed={answers[p.id] === false}
-                  onClick={() => setAnswers((a) => ({ ...a, [p.id]: false }))}
-                >
-                  No
-                </Button>
-              </div>
+              <p className="font-bold">How was going to this event with her?</p>
+              <StarInput
+                value={answers[p.id] ?? 0}
+                onChange={(stars) => setAnswers((a) => ({ ...a, [p.id]: stars }))}
+                label={`Rate going with ${p.name}`}
+              />
             </Card>
           </li>
         ))}
@@ -192,7 +196,7 @@ export default function RatePage() {
           </p>
         )}
         <Button full size="lg" loading={saving} disabled={answeredCount === 0} onClick={handleSave}>
-          {answeredCount === 0 ? 'Answer at least one' : `Save ${answeredCount} ${answeredCount === 1 ? 'answer' : 'answers'}`}
+          {answeredCount === 0 ? 'Rate at least one person' : `Save ${answeredCount} ${answeredCount === 1 ? 'rating' : 'ratings'}`}
         </Button>
         <p className="text-center text-xs text-muted">
           Had a problem with someone? Report her from her profile.

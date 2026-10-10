@@ -84,16 +84,20 @@ seed.sql
 | `/events/new` | Publish a new event | Create event form (topics, format, date, start/end, area, link) |
 | `/events/:id` | Event detail | Event info, who's going (list revealed after joining), join bar, demo link |
 | `/events/:id/chat` | Event chat | Realtime group chat with live AI safety warning flags, Report / Block |
-| `/events/:id/rate` | Member ratings | Post-event "Would you go with her again?" ratings |
+| `/events/:id/rate` | Member ratings | Post-event 1–5 star ratings: "How was going to this event with her?" |
 | `/messages/:id` | Direct messages | Realtime 1:1 chat with a connected member, same AI moderation |
 | `/u/:id` | Other member profile | Bio, vouch source, Message, Block / Report |
 | `/u/:id/report` | Report a member | Reason from the fixed list plus optional details |
 
 ## Session & Network Model
 
-There is no real authentication. After a valid invite code and onboarding, the user id
-is stored in localStorage under `idwtga_user_id`. `src/lib/session.js` exposes
-`getCurrentUser()`, `setCurrentUser(id)` and `clearSession()`.
+Members have a username and password (Supabase Auth; see `src/lib/auth.js`). They choose them
+during onboarding, after the invite code, and sign in at `/signin`. The username is stored as a
+hidden `<username>@members.idwtga.app` login; "Confirm email" must be off in Supabase. The
+member's id is the Supabase Auth user id and is cached in localStorage under `idwtga_user_id`;
+`src/lib/session.js` exposes `getCurrentUser()`, `setCurrentUser(id)` and `clearSession()`
+(which also signs out). Database access rules (`supabase/migrations/003_auth.sql`) let each
+member act only as herself. Seeded demo members have no login.
 
 The demo invite code `JURY2026` is reusable and shown on the welcome screen.
 
@@ -123,7 +127,8 @@ blocks       blocker_id uuid, blocked_id uuid, created_at timestamptz (pk: both)
 reports      id uuid pk, reporter_id uuid, reported_id uuid, reason text,
              details text, status text default 'pending', created_at timestamptz
 ratings      id uuid pk, event_id uuid, from_user uuid, to_user uuid,
-             would_go_again bool, created_at timestamptz
+             stars smallint (1–5), would_go_again bool (legacy, unused),
+             created_at timestamptz
 
 ```
 
@@ -200,7 +205,7 @@ Tags saved under the old eight-item list are mapped on read and by the migration
 * **Event Creation:** Any user can post an event at `/events/new`. They provide a title, description, tags, venue/location, date/time, and an optional external event link (`url`).
 * **Block:** instant, no reason asked. Both users stop seeing each other's profile and messages. Nothing happens to the blocked user.
 * **Report:** requires a reason from the fixed list plus optional details. Saved with status `pending`. No automatic sanction.
-* **Rating:** private. One question per person met: "Would you go with her again?"
+* **Rating:** 1–5 stars per person met: "How was going to this event with her?". Opens once the event has ended (or started, if it has no end time); the demo button skips the wait. Ratings are anonymous: nobody sees who gave which stars. A member's average ("★ 4.7 · 6 ratings") shows on her profile only once she has at least 3 ratings.
 * **Safety wording:** say "vouched" or "verified". Never say "100% safe".
 
 ## API contracts

@@ -1,9 +1,7 @@
 -- I Don't Want to Go Alone — database schema.
--- Run in the Supabase SQL editor on an empty project, then run seed.sql.
---
--- There is no real auth: the browser uses the anon key for everything, so the
--- policies below let anon read and write all tables. Fine for a hackathon demo,
--- NOT for production.
+-- Fresh project: run this in the Supabase SQL editor, then migrations/003_auth.sql
+-- (accounts and access rules), then seed.sql.
+-- Existing project: don't run this; run the migrations in order instead.
 
 create table users (
   id uuid primary key,
@@ -101,23 +99,25 @@ create table ratings (
   event_id uuid not null references events (id) on delete cascade,
   from_user uuid not null references users (id) on delete cascade,
   to_user uuid not null references users (id) on delete cascade,
-  would_go_again bool not null,
+  stars smallint not null constraint ratings_stars_range check (stars between 1 and 5),
+  would_go_again bool, -- legacy yes/no answer, no longer asked
   created_at timestamptz not null default now(),
   unique (event_id, from_user, to_user)
 );
+create index ratings_to_user_idx on ratings (to_user);
 
 create index on messages (event_id, created_at);
 create index on attendances (event_id);
 create index on direct_messages (to_user, created_at);
 
--- Demo-only access: anon can do everything (see note at the top).
+-- Row level security on: nothing is readable or writable until migrations/003_auth.sql
+-- adds the access rules.
 do $$
 declare t text;
 begin
   foreach t in array array['users','invites','connections','events','attendances','messages','direct_messages','blocks','reports','ratings']
   loop
     execute format('alter table %I enable row level security', t);
-    execute format('create policy "demo anon access" on %I for all to anon using (true) with check (true)', t);
   end loop;
 end $$;
 

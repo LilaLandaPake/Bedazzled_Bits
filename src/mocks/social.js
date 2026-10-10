@@ -94,7 +94,29 @@ export const direct_messages = [
   },
 ]
 
-// Mirrors `blocks`, `reports` and `ratings`. Empty by default.
+// Mirrors `blocks` and `reports`. Empty by default.
 export const blocks = []
 export const reports = []
-export const ratings = []
+// 1–5 stars. Lila, Marta and Aisha have 3+ ratings, so their average shows; Núria has 2
+// (not shown yet), Sofía and Camille none.
+export const ratings = [
+  [e.hackathon, marta, lila, 5],
+  [e.hackathon, aisha, lila, 5],
+  [e.hackathon, nuria, lila, 4],
+  [e.aiTalk, aisha, lila, 5],
+  [e.hackathon, lila, marta, 5],
+  [e.hackathon, aisha, marta, 4],
+  [e.hackathon, nuria, marta, 5],
+  [e.hackathon, lila, aisha, 4],
+  [e.hackathon, marta, aisha, 5],
+  [e.aiTalk, lila, aisha, 5],
+  [e.aiTalk, lila, nuria, 5],
+  [e.aiTalk, aisha, nuria, 4],
+].map(([event_id, from_user, to_user, stars], i) => ({
+  id: `b0000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+  event_id,
+  from_user,
+  to_user,
+  stars,
+  created_at: '2026-10-10T08:00:00Z',
+}))
