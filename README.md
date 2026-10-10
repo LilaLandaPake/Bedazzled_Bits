@@ -34,8 +34,10 @@ Copy `.env.example` to `.env.local`.
 |---|---|---|
 | `VITE_SUPABASE_URL` | browser | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | browser | Supabase anon key |
-| `ANTHROPIC_API_KEY` | `/api` only | Claude key for recommendations and moderation. **Never prefix with `VITE_`.** |
-| `ANTHROPIC_MODEL` | `/api` only | Optional. Defaults to `claude-haiku-4-5` (fast enough for the 6 s limit). |
+| `GEMINI_API_KEY` | `/api` only | Google Gemini key (free tier, from aistudio.google.com). **Never prefix with `VITE_`.** |
+| `ANTHROPIC_API_KEY` | `/api` only | Alternative: Claude key (paid). Set one of the two AI keys. |
+| `GEMINI_MODEL` / `ANTHROPIC_MODEL` | `/api` only | Optional. Defaults: `gemini-3.5-flash-lite` / `claude-haiku-4-5`. |
+| `AI_PROVIDER` | `/api` only | Optional: `gemini` or `anthropic`, only if both keys are set. |
 
 ## Set up Supabase
 
@@ -51,11 +53,11 @@ Copy `.env.example` to `.env.local`.
 ## Deploy to Vercel
 
 1. Import the repo in Vercel (framework preset: Vite).
-2. Add the four environment variables above.
+2. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` and one AI key.
 3. Deploy. `vercel.json` sends every non-`/api` path to the app so links like `/events/…` work on reload.
 
-Set a monthly spend limit on the Anthropic account: `/api/recommend` and `/api/moderate`
-are public endpoints.
+`/api/recommend` and `/api/moderate` are public endpoints: if you use a paid key, set a
+monthly spend limit on that account.
 
 ## Before every commit
 
@@ -67,4 +69,4 @@ npm run build
 ## Stack
 
 React 19 (JSX), Vite 8, Tailwind CSS 4, React Router, Supabase (database + realtime),
-lucide-react icons, Vercel serverless functions calling Claude.
+lucide-react icons, Vercel serverless functions calling Gemini or Claude.

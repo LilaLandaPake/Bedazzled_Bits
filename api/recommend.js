@@ -1,11 +1,10 @@
-// POST /api/recommend — ranks events for a member with Claude.
+// POST /api/recommend — ranks events for a member with AI (Gemini or Claude, see _llm.js).
 // Contract (PROJECT_GUIDE.md): { user, events } -> { recommendations: [{ event_id, reason }] }
 // The browser falls back to its own sort if this fails or takes > 6 s, so errors here
 // just return a non-200 status.
-//
-// Env: ANTHROPIC_API_KEY (required), ANTHROPIC_MODEL (optional override).
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5'
+import { generateJson, NotConfiguredError } from './_llm.js'
+
 // Leave headroom under the browser's 6 s limit.
 const TIMEOUT_MS = 5000
 const MAX_EVENTS = 40
@@ -47,10 +46,6 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(503).json({ error: 'AI not configured' })
-  }
-
   const { user, events } = req.body ?? {}
   if (!user || !Array.isArray(events) || events.length === 0) {
     return res.status(400).json({ error: 'Expected { user, events[] }' })
@@ -71,57 +66,24 @@ export default async function handler(req, res) {
   }
   const ids = new Set(input.events.map((e) => e.id))
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-
   try {
-    const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 2000,
-        system: SYSTEM,
-        output_config: { format: { type: 'json_schema', schema: SCHEMA } },
-        messages: [
-          {
-            role: 'user',
-            content: `Today is ${new Date().toISOString().slice(0, 10)}.\n\n${JSON.stringify(input)}`,
-          },
-        ],
-      }),
+    const parsed = await generateJson({
+      system: SYSTEM,
+      user: `Today is ${new Date().toISOString().slice(0, 10)}.\n\n${JSON.stringify(input)}`,
+      schema: SCHEMA,
+      maxTokens: 2000,
+      timeoutMs: TIMEOUT_MS,
     })
-
-    if (!apiRes.ok) {
-      console.error('recommend: Anthropic API error', apiRes.status, await apiRes.text())
-      return res.status(502).json({ error: 'AI request failed' })
-    }
-
-    const message = await apiRes.json()
-    if (message.stop_reason !== 'end_turn') {
-      console.error('recommend: unexpected stop_reason', message.stop_reason)
-      return res.status(502).json({ error: 'AI response incomplete' })
-    }
-
-    const text = message.content?.find((b) => b.type === 'text')?.text
-    const parsed = JSON.parse(text)
     const seen = new Set()
-    const recommendations = parsed.recommendations.filter((r) => {
-      if (!ids.has(r.event_id) || seen.has(r.event_id)) return false
+    const recommendations = (Array.isArray(parsed?.recommendations) ? parsed.recommendations : []).filter((r) => {
+      if (typeof r?.event_id !== 'string' || !ids.has(r.event_id) || seen.has(r.event_id)) return false
       seen.add(r.event_id)
       return true
     })
-
     return res.status(200).json({ recommendations })
   } catch (err) {
+    if (err instanceof NotConfiguredError) return res.status(503).json({ error: 'AI not configured' })
     console.error('recommend: failed', err?.name === 'AbortError' ? 'timeout' : err)
-    return res.status(504).json({ error: 'AI unavailable' })
-  } finally {
-    clearTimeout(timer)
+    return res.status(502).json({ error: 'AI unavailable' })
   }
 }

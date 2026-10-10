@@ -1,11 +1,10 @@
-// POST /api/moderate — checks one chat message for safety risks with Claude.
+// POST /api/moderate — checks one chat message for safety risks with AI (Gemini or Claude, see _llm.js).
 // Contract (PROJECT_GUIDE.md): { text, recent[] } -> { flagged, category, reason }
 // The message is already saved when this runs; if this fails the browser simply
 // leaves it unflagged. Sending is never blocked by the AI.
-//
-// Env: ANTHROPIC_API_KEY (required), ANTHROPIC_MODEL (optional override).
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5'
+import { generateJson, NotConfiguredError } from './_llm.js'
+
 const TIMEOUT_MS = 5000
 
 const CATEGORIES = [
@@ -58,10 +57,6 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(503).json({ error: 'AI not configured' })
-  }
-
   const { text, recent } = req.body ?? {}
   if (typeof text !== 'string' || !text.trim()) {
     return res.status(400).json({ error: 'Expected { text, recent[] }' })
@@ -72,54 +67,24 @@ export default async function handler(req, res) {
     .slice(-5)
     .map((m) => m.slice(0, 500))
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-
   try {
-    const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 300,
-        system: SYSTEM,
-        output_config: { format: { type: 'json_schema', schema: SCHEMA } },
-        messages: [
-          {
-            role: 'user',
-            content: JSON.stringify({ recent_messages: context, new_message: text.slice(0, 2000) }),
-          },
-        ],
-      }),
+    const result = await generateJson({
+      system: SYSTEM,
+      user: JSON.stringify({ recent_messages: context, new_message: text.slice(0, 2000) }),
+      schema: SCHEMA,
+      maxTokens: 300,
+      timeoutMs: TIMEOUT_MS,
     })
-
-    if (!apiRes.ok) {
-      console.error('moderate: Anthropic API error', apiRes.status, await apiRes.text())
-      return res.status(502).json({ error: 'AI request failed' })
-    }
-
-    const message = await apiRes.json()
-    if (message.stop_reason !== 'end_turn') {
-      console.error('moderate: unexpected stop_reason', message.stop_reason)
-      return res.status(502).json({ error: 'AI response incomplete' })
-    }
-
-    const result = JSON.parse(message.content?.find((b) => b.type === 'text')?.text)
-    const flagged = result.flagged === true && CATEGORIES.includes(result.category)
+    const flagged = result?.flagged === true && CATEGORIES.includes(result.category)
+    const reason = typeof result?.reason === 'string' ? result.reason.trim() : ''
     return res.status(200).json({
       flagged,
       category: flagged ? result.category : null,
-      reason: flagged ? result.reason.trim() || 'This message may be risky.' : null,
+      reason: flagged ? reason || 'This message may be risky.' : null,
     })
   } catch (err) {
+    if (err instanceof NotConfiguredError) return res.status(503).json({ error: 'AI not configured' })
     console.error('moderate: failed', err?.name === 'AbortError' ? 'timeout' : err)
-    return res.status(504).json({ error: 'AI unavailable' })
-  } finally {
-    clearTimeout(timer)
+    return res.status(502).json({ error: 'AI unavailable' })
   }
 }
