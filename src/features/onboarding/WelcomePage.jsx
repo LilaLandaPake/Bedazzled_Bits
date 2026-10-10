@@ -1,20 +1,32 @@
-import { HeartHandshake, KeyRound } from 'lucide-react'
+import { ArrowRight, HeartHandshake, KeyRound } from 'lucide-react'
+import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import Button from '../../components/ui/Button.jsx'
 import Card from '../../components/ui/Card.jsx'
+import Input from '../../components/ui/Input.jsx'
 import { DEMO_INVITE_CODE } from '../../lib/constants.js'
-import { getCurrentUser, setCurrentUser } from '../../lib/session.js'
-import { MOCK_USER_IDS } from '../../mocks/index.js'
+import { checkInvite, normalizeCode } from '../../lib/db.js'
+import { getCurrentUser } from '../../lib/session.js'
 
 export default function WelcomePage() {
   const navigate = useNavigate()
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+  const [checking, setChecking] = useState(false)
 
   if (getCurrentUser()) return <Navigate to="/events" replace />
 
-  // TODO(step 2): replace with invite code entry + onboarding.
-  function previewAsDemo() {
-    setCurrentUser(MOCK_USER_IDS.marta)
-    navigate('/events')
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError('')
+    setChecking(true)
+    try {
+      await checkInvite(code)
+      navigate(`/onboarding?code=${encodeURIComponent(normalizeCode(code))}`)
+    } catch (err) {
+      setError(err.message)
+      setChecking(false)
+    }
   }
 
   return (
@@ -32,19 +44,40 @@ export default function WelcomePage() {
 
       <Card className="flex items-center gap-3">
         <KeyRound size={22} className="shrink-0 text-accent-gold" />
-        <p className="text-sm">
-          Jury demo invite code: <span className="font-mono font-bold text-accent-gold">{DEMO_INVITE_CODE}</span>
+        <p className="flex-1 text-sm">
+          Jury? Use the demo code <span className="font-mono font-bold text-accent-gold">{DEMO_INVITE_CODE}</span>
         </p>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setCode(DEMO_INVITE_CODE)
+            setError('')
+          }}
+        >
+          Use it
+        </Button>
       </Card>
 
-      <div className="flex flex-col gap-3">
-        <Button full to="/onboarding">
-          I have an invite code
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <Input
+          label="Your invite code"
+          placeholder="e.g. JURY2026"
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value.toUpperCase())
+            setError('')
+          }}
+          error={error}
+          hint="You need a code from an existing member to join."
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <Button full type="submit" icon={checking ? undefined : ArrowRight} loading={checking} disabled={!code.trim()}>
+          {checking ? 'Checking code…' : 'Continue'}
         </Button>
-        <Button full variant="ghost" onClick={previewAsDemo}>
-          Preview as a demo member
-        </Button>
-      </div>
+      </form>
     </div>
   )
 }
