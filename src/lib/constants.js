@@ -1,15 +1,46 @@
 export const DEMO_INVITE_CODE = 'JURY2026'
 
-export const INTERESTS = [
-  'AI & Tech',
-  'Design & UX',
-  'Entrepreneurship',
-  'Coding',
-  'Data & Analytics',
-  'Languages',
-  'Career & Leadership',
-  'Creative Writing',
+// Interests double as event tags. `short` is the label on event cards ("AI", "DESIGN").
+export const INTEREST_OPTIONS = [
+  { label: 'AI and machine learning', short: 'AI' },
+  { label: 'Programming and web development', short: 'Coding' },
+  { label: 'Data and analytics', short: 'Data' },
+  { label: 'Design and UX', short: 'Design' },
+  { label: 'Cybersecurity', short: 'Security' },
+  { label: 'Video games and creative tech', short: 'Games' },
+  { label: 'Entrepreneurship and startups', short: 'Startups' },
+  { label: 'Career and leadership', short: 'Career' },
+  { label: 'Marketing and communication', short: 'Marketing' },
+  { label: 'Finance and investing', short: 'Finance' },
+  { label: 'Science and research', short: 'Science' },
+  { label: 'Sustainability and social impact', short: 'Impact' },
+  { label: 'Languages', short: 'Languages' },
+  { label: 'Art, culture and creativity', short: 'Art' },
+  { label: 'Health and wellbeing', short: 'Wellbeing' },
 ]
+
+export const INTERESTS = INTEREST_OPTIONS.map((i) => i.label)
+
+export const shortTag = (tag) => INTEREST_OPTIONS.find((i) => i.label === tag)?.short ?? tag
+
+// Tags saved before the taxonomy above existed (see supabase/migrations).
+const LEGACY_INTERESTS = {
+  'AI & Tech': 'AI and machine learning',
+  'Design & UX': 'Design and UX',
+  Entrepreneurship: 'Entrepreneurship and startups',
+  Coding: 'Programming and web development',
+  'Data & Analytics': 'Data and analytics',
+  'Career & Leadership': 'Career and leadership',
+  'Creative Writing': 'Art, culture and creativity',
+}
+
+export const normalizeInterests = (list) => [...new Set((list ?? []).map((t) => LEGACY_INTERESTS[t] ?? t))]
+
+// What kind of event it is, shown next to the topic tag ("AI · HACKATHON").
+export const EVENT_FORMATS = ['Talk', 'Workshop', 'Course', 'Hackathon', 'Meetup', 'Networking']
+
+// Each member can vouch for this many friends with single-use codes.
+export const INVITE_LIMIT = 3
 
 // Barcelona neighbourhoods offered in onboarding, with approximate centre points.
 export const AREAS = [

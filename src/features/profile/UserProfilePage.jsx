@@ -1,15 +1,15 @@
-import { BadgeCheck, Ban, CheckCircle2, Flag, MapPin, UserCheck, UserPlus, UserX } from 'lucide-react'
+import { BadgeCheck, Ban, Flag, MapPin, MessageSquare, UserCheck, UserPlus, UserX } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../../components/ui/Avatar.jsx'
 import Button from '../../components/ui/Button.jsx'
-import Card from '../../components/ui/Card.jsx'
-import Chip from '../../components/ui/Chip.jsx'
+import { Tag } from '../../components/ui/Chip.jsx'
 import Header from '../../components/ui/Header.jsx'
+import { Eyebrow } from '../../components/ui/PageTitle.jsx'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States.jsx'
+import { shortTag } from '../../lib/constants.js'
 import { blockUser, connectWith, getMember, unblockUser } from '../../lib/db.js'
 import { clearSession, getCurrentUser } from '../../lib/session.js'
-import ReportForm from '../safety/ReportForm.jsx'
 
 // Keyed by id so moving between profiles starts from a clean state.
 export default function UserProfilePage() {
@@ -24,7 +24,6 @@ function MemberProfile({ id }) {
   const [attempt, setAttempt] = useState(0)
   const [busy, setBusy] = useState('')
   const [actionError, setActionError] = useState('')
-  const [view, setView] = useState('profile') // 'profile' | 'report' | 'reported'
 
   useEffect(() => {
     if (id === me) return
@@ -60,7 +59,7 @@ function MemberProfile({ id }) {
     }
   }
 
-  const header = <Header title={state.member?.name ?? 'Member'} back="/events" />
+  const header = <Header back="/friends" />
 
   if (state.status === 'loading') {
     return (
@@ -102,57 +101,41 @@ function MemberProfile({ id }) {
 
   const { member, voucher, isConnected, iBlocked } = state
 
-  if (view === 'report') {
-    return (
-      <>
-        <Header title={`Report ${member.name}`} onBack={() => setView('profile')} />
-        <ReportForm reporterId={me} member={member} onDone={() => setView('reported')} />
-      </>
-    )
-  }
-
   return (
     <>
       {header}
 
-      {view === 'reported' && (
-        <p role="status" className="mb-4 flex gap-2 rounded-2xl bg-accent-purple/15 px-4 py-3 text-sm text-accent-purple">
-          <CheckCircle2 size={18} className="shrink-0" />
-          Thanks. Your report was sent and will be reviewed. {member.name} won't be told who reported her.
-        </p>
-      )}
-
       {iBlocked ? (
         <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <Avatar name={member.name} size="lg" className="opacity-50" />
-          <h2 className="text-xl font-bold">You blocked {member.name}</h2>
-          <p className="text-sm text-text-main/70">
-            You won't see each other's profile or messages. She isn't notified.
-          </p>
+          <Avatar name={member.name} size="xl" className="opacity-50" />
+          <h1 className="font-display text-3xl font-extrabold">You blocked {member.name}</h1>
+          <p className="text-muted">You won't see each other's profile or messages. She isn't notified.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col items-center gap-2 py-4 text-center">
-            <Avatar name={member.name} size="lg" />
-            <h2 className="text-2xl font-extrabold">{member.name}</h2>
-            {member.role && <p className="text-text-main/75">{member.role}</p>}
-            {member.area && (
-              <p className="flex items-center gap-1 text-sm text-text-main/60">
-                <MapPin size={14} /> {member.area}
-              </p>
-            )}
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center gap-5">
+            <Avatar name={member.name} size="xl" />
+            <div className="min-w-0">
+              <h1 className="font-display text-4xl leading-tight font-extrabold tracking-tight">{member.name}</h1>
+              {member.role && <p className="text-lg">{member.role}</p>}
+              {member.area && (
+                <p className="flex items-center gap-1.5 text-muted">
+                  <MapPin size={16} /> {member.area}
+                </p>
+              )}
+            </div>
           </div>
 
-          <Card className="flex items-center gap-3">
-            <BadgeCheck size={22} className="shrink-0 text-accent-gold" />
-            <p className="text-sm">
+          <p className="flex items-center gap-3 rounded-2xl bg-soft px-5 py-4 text-soft-ink">
+            <BadgeCheck size={22} className="shrink-0" />
+            <span>
               {voucher ? (
                 <>
                   Vouched for by{' '}
                   {voucher.id === me ? (
-                    <span className="font-semibold">you</span>
+                    <span className="font-bold">you</span>
                   ) : (
-                    <Link to={`/u/${voucher.id}`} className="font-semibold text-accent-gold underline-offset-2 hover:underline">
+                    <Link to={`/u/${voucher.id}`} className="font-bold underline underline-offset-2">
                       {voucher.name}
                     </Link>
                   )}
@@ -160,27 +143,33 @@ function MemberProfile({ id }) {
               ) : (
                 'Founding member of the community'
               )}
-            </p>
-          </Card>
+            </span>
+          </p>
 
           {member.interests?.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-text-main/70">Interests</h3>
-              <div className="flex flex-wrap gap-1.5">
+            <section className="flex flex-col gap-3">
+              <Eyebrow as="h2">Interests</Eyebrow>
+              <div className="flex flex-wrap gap-2">
                 {member.interests.map((t) => (
-                  <Chip key={t}>{t}</Chip>
+                  <Tag key={t}>{shortTag(t)}</Tag>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
           {isConnected ? (
-            <p className="flex items-center justify-center gap-2 font-semibold text-accent-gold">
-              <UserCheck size={18} /> In your network
-            </p>
+            <div className="flex flex-col gap-3">
+              <Button full size="lg" icon={MessageSquare} to={`/messages/${member.id}`}>
+                Message {member.name}
+              </Button>
+              <p className="flex items-center justify-center gap-2 font-bold text-muted">
+                <UserCheck size={18} /> In your network
+              </p>
+            </div>
           ) : (
             <Button
               full
+              size="lg"
               icon={UserPlus}
               loading={busy === 'connect'}
               onClick={() => run('connect', () => connectWith(me, member.id))}
@@ -191,20 +180,16 @@ function MemberProfile({ id }) {
         </div>
       )}
 
-      <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6">
-        <h3 className="text-sm font-semibold text-text-main/70">Safety</h3>
+      <section className="mt-8 flex flex-col gap-3 border-t border-line pt-6">
+        <Eyebrow as="h2">Safety</Eyebrow>
         {actionError && (
-          <p role="alert" className="text-sm text-primary">
+          <p role="alert" className="font-bold text-primary">
             {actionError}
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
           {iBlocked ? (
-            <Button
-              variant="secondary"
-              loading={busy === 'block'}
-              onClick={() => run('block', () => unblockUser(me, member.id))}
-            >
+            <Button variant="secondary" loading={busy === 'block'} onClick={() => run('block', () => unblockUser(me, member.id))}>
               Unblock
             </Button>
           ) : (
@@ -217,14 +202,14 @@ function MemberProfile({ id }) {
               Block
             </Button>
           )}
-          <Button variant="danger" icon={Flag} onClick={() => setView('report')} disabled={view === 'reported'}>
+          <Button variant="danger" icon={Flag} to={`/u/${member.id}/report`}>
             Report
           </Button>
         </div>
-        <p className="text-xs text-text-main/50">
-          Blocking is instant and private. Reports are reviewed by the team; nothing happens automatically.
+        <p className="text-sm text-muted">
+          Blocking is instant and private. Every report is reviewed by a person; nothing happens automatically.
         </p>
-      </div>
+      </section>
     </>
   )
 }

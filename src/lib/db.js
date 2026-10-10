@@ -1,7 +1,7 @@
 // Data access for the app. Every function works against Supabase when it's configured
 // and against the local mock database otherwise. Errors thrown here have messages that
 // are safe to show to the user.
-import { AREAS } from './constants.js'
+import { AREAS, INVITE_LIMIT, normalizeInterests } from './constants.js'
 import { distanceKm } from './distance.js'
 import { mockDb, mockDelay, saveMockDb } from './mockDb.js'
 import { supabase } from './supabase.js'
@@ -10,6 +10,10 @@ import { uuid } from './uuid.js'
 const NETWORK_ERROR = "We couldn't reach the server. Check your connection and try again."
 
 export const normalizeCode = (code) => code.trim().toUpperCase()
+
+// Rows saved before the current interest list get their tags mapped on the way in.
+const asUser = (u) => u && { ...u, interests: normalizeInterests(u.interests) }
+const asEvent = (e) => e && { ...e, tags: normalizeInterests(e.tags) }
 
 // ---------- Invites ----------
 
@@ -47,10 +51,27 @@ export async function getUser(id) {
   if (supabase) {
     const { data, error } = await supabase.from('users').select('*').eq('id', id).maybeSingle()
     if (error) throw new Error(NETWORK_ERROR)
-    return data
+    return asUser(data)
   }
   await mockDelay(150)
-  return mockDb.users.find((u) => u.id === id) ?? null
+  return asUser(mockDb.users.find((u) => u.id === id) ?? null)
+}
+
+// Returning members: finds members by name (ignoring case and accents) so they can sign
+// back in. There is no real auth in this demo, so this is a lookup, not a password check.
+const fold = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+
+export async function findMembers(name) {
+  const q = fold(name ?? '')
+  if (!q) return []
+  if (supabase) {
+    // Matching ignores accents, which SQL ilike can't do, so filter the (small) member list here.
+    const { data, error } = await supabase.from('users').select('*').limit(200)
+    if (error) throw new Error(NETWORK_ERROR)
+    return data.filter((u) => fold(u.name) === q).slice(0, 5).map(asUser)
+  }
+  await mockDelay(150)
+  return mockDb.users.filter((u) => fold(u.name) === q).slice(0, 5).map(asUser)
 }
 
 // Members connected to `userId`, as user rows.
@@ -65,11 +86,11 @@ export async function getFriends(userId) {
     if (!ids.length) return []
     const { data, error: usersError } = await supabase.from('users').select('*').in('id', ids)
     if (usersError) throw new Error(NETWORK_ERROR)
-    return data
+    return data.map(asUser)
   }
   await mockDelay(150)
   const ids = new Set(mockDb.connections.filter((c) => c.user_id === userId).map((c) => c.connected_user_id))
-  return mockDb.users.filter((u) => ids.has(u.id))
+  return mockDb.users.filter((u) => ids.has(u.id)).map(asUser)
 }
 
 // Creates the member, claims the invite and connects her with whoever invited her
@@ -93,12 +114,13 @@ export async function joinWithInvite({ code: rawCode, name, role, interests, are
   }
 
   const now = user.created_at
-  const links = invite.owner_id
-    ? [
-        { user_id: invite.owner_id, connected_user_id: user.id, created_at: now },
-        { user_id: user.id, connected_user_id: invite.owner_id, created_at: now },
-      ]
-    : []
+  // The reusable demo code also drops the newcomer into the voucher's circle, so the jury
+  // starts with a network ("For you", Friends, friend badges) instead of a single friend.
+  const circle = invite.owner_id && invite.reusable ? (await getFriends(invite.owner_id)).map((f) => f.id) : []
+  const links = [...new Set([invite.owner_id, ...circle].filter(Boolean))].flatMap((id) => [
+    { user_id: id, connected_user_id: user.id, created_at: now },
+    { user_id: user.id, connected_user_id: id, created_at: now },
+  ])
 
   if (supabase) {
     const { error: userError } = await supabase.from('users').insert(user)
@@ -153,11 +175,11 @@ async function socialContext(userId) {
       supabase.from('blocks').select('*').or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
     ])
     if ([meRes, linksRes, blocksRes].some((r) => r.error)) throw new Error(NETWORK_ERROR)
-    me = meRes.data
+    me = asUser(meRes.data)
     friendIds = linksRes.data.map((l) => l.connected_user_id)
     blocks = blocksRes.data
   } else {
-    me = mockDb.users.find((u) => u.id === userId) ?? null
+    me = asUser(mockDb.users.find((u) => u.id === userId) ?? null)
     friendIds = mockDb.connections.filter((c) => c.user_id === userId).map((c) => c.connected_user_id)
     blocks = mockDb.blocks.filter((b) => b.blocker_id === userId || b.blocked_id === userId)
   }
@@ -172,16 +194,16 @@ async function usersByIds(ids) {
   if (supabase) {
     const { data, error } = await supabase.from('users').select('*').in('id', ids)
     if (error) throw new Error(NETWORK_ERROR)
-    return data
+    return data.map(asUser)
   }
   const set = new Set(ids)
-  return mockDb.users.filter((u) => set.has(u.id))
+  return mockDb.users.filter((u) => set.has(u.id)).map(asUser)
 }
 
 // Adds attendeeCount, isGoing, friendsGoing and distance_km to an event.
 function enrich(event, goingIds, ctx, people) {
   return {
-    ...event,
+    ...asEvent(event),
     attendeeCount: goingIds.length,
     isGoing: goingIds.includes(ctx.me.id),
     friendsGoing: goingIds
@@ -300,14 +322,16 @@ export async function leaveEvent(eventId, userId) {
 }
 
 // Publishes a member's event and signs her up for it. Returns the new event.
-export async function createEvent({ title, description, tags, starts_at, venue, area, url }, userId) {
+export async function createEvent({ title, description, tags, format, starts_at, ends_at, venue, area, url }, userId) {
   const point = AREAS.find((a) => a.name === area)
   const event = {
     id: uuid(),
     title: title.trim(),
     description: description.trim(),
     tags,
+    format: format || null,
     starts_at,
+    ends_at: ends_at || null,
     venue: venue.trim() ? `${venue.trim()}, ${area}` : `${area}, Barcelona`,
     lat: point?.lat ?? null,
     lng: point?.lng ?? null,
@@ -369,6 +393,7 @@ export async function getChat(eventId, userId) {
     me: ctx.me,
     event,
     isGoing: goingIds.includes(userId),
+    goingCount: goingIds.length,
     blocked: ctx.blocked,
     messages: messages.filter((m) => !ctx.blocked.has(m.user_id)),
     people,
@@ -440,6 +465,235 @@ export function subscribeToChat(eventId, onMessage) {
   return () => mockChannel.removeEventListener('message', listener)
 }
 
+// ---------- Direct messages ----------
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const mockDmChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('idwtga_dm') : null
+
+const inThread = (m, a, b) => (m.user_id === a && m.to_user === b) || (m.user_id === b && m.to_user === a)
+
+// 1:1 chat between two members. Only members of each other's network may write
+// (`isConnected`); `other` is null when she doesn't exist or either has blocked the other.
+export async function getDirectChat(userId, otherId) {
+  const ctx = await socialContext(userId)
+  if (!ctx.me) return { me: null }
+  if (!UUID_RE.test(otherId) || otherId === userId || ctx.blocked.has(otherId)) return { me: ctx.me, other: null }
+
+  const other = await getUser(otherId)
+  if (!other) return { me: ctx.me, other: null }
+
+  let messages
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('direct_messages')
+      .select('*')
+      .or(`and(user_id.eq.${userId},to_user.eq.${otherId}),and(user_id.eq.${otherId},to_user.eq.${userId})`)
+      .order('created_at')
+      .limit(200)
+    if (error) throw new Error(NETWORK_ERROR)
+    messages = data
+  } else {
+    await mockDelay()
+    messages = mockDb.direct_messages
+      .filter((m) => inThread(m, userId, otherId))
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }
+  return { me: ctx.me, other, isConnected: ctx.friends.has(otherId), messages }
+}
+
+export async function sendDirectMessage(userId, toUser, text) {
+  const message = {
+    id: uuid(),
+    user_id: userId,
+    to_user: toUser,
+    text: text.trim(),
+    flagged: false,
+    flag_category: null,
+    flag_reason: null,
+    created_at: new Date().toISOString(),
+  }
+  if (supabase) {
+    const { error } = await supabase.from('direct_messages').insert(message)
+    if (error) throw new Error('Message not sent.')
+    return message
+  }
+  await mockDelay(150)
+  mockDb.direct_messages.push(message)
+  saveMockDb()
+  mockDmChannel?.postMessage(message)
+  return message
+}
+
+export async function flagDirectMessage(message, { category, reason }) {
+  const patch = { flagged: true, flag_category: category, flag_reason: reason }
+  if (supabase) {
+    const { error } = await supabase.from('direct_messages').update(patch).eq('id', message.id)
+    if (error) throw new Error(NETWORK_ERROR)
+  } else {
+    const stored = mockDb.direct_messages.find((m) => m.id === message.id)
+    if (stored) Object.assign(stored, patch)
+    saveMockDb()
+  }
+  const updated = { ...message, ...patch }
+  mockDmChannel?.postMessage(updated)
+  return updated
+}
+
+// Calls onMessage(message) for new or updated messages from `otherId` to `userId`.
+// The user's own messages are added by the page when she sends them.
+export function subscribeToDirectChat(userId, otherId, onMessage) {
+  if (supabase) {
+    const filter = `to_user=eq.${userId}`
+    const handle = (p) => p.new.user_id === otherId && onMessage(p.new)
+    const channel = supabase
+      .channel(`dm:${userId}:${otherId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter }, handle)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'direct_messages', filter }, handle)
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }
+  if (!mockDmChannel) return () => {}
+  const listener = ({ data }) => {
+    if (!data || !inThread(data, userId, otherId)) return
+    const stored = mockDb.direct_messages.find((m) => m.id === data.id)
+    if (stored) Object.assign(stored, data)
+    else mockDb.direct_messages.push(data)
+    onMessage(data)
+  }
+  mockDmChannel.addEventListener('message', listener)
+  return () => mockDmChannel.removeEventListener('message', listener)
+}
+
+// ---------- Network: friends list and "For you" ----------
+
+const NEW_MEMBER_DAYS = 14
+const ACTIVITY_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
+
+async function eventsByIds(ids) {
+  if (!ids.length) return []
+  if (supabase) {
+    const { data, error } = await supabase.from('events').select('*').in('id', ids)
+    if (error) throw new Error(NETWORK_ERROR)
+    return data.map(asEvent)
+  }
+  const set = new Set(ids)
+  return mockDb.events.filter((e) => set.has(e.id)).map(asEvent)
+}
+
+// The user, her (unblocked) friends, their attendances and the events they point to,
+// plus everyone needed to name who vouched for each friend.
+async function networkData(userId) {
+  const ctx = await socialContext(userId)
+  if (!ctx.me) return { me: null }
+
+  const ids = [userId, ...ctx.friends]
+  let attendances
+  if (supabase) {
+    const { data, error } = await supabase.from('attendances').select('user_id, event_id, created_at').in('user_id', ids)
+    if (error) throw new Error(NETWORK_ERROR)
+    attendances = data
+  } else {
+    await mockDelay()
+    const set = new Set(ids)
+    attendances = mockDb.attendances.filter((a) => set.has(a.user_id))
+  }
+
+  const [friends, events] = await Promise.all([
+    usersByIds([...ctx.friends]),
+    eventsByIds([...new Set(attendances.map((a) => a.event_id))]),
+  ])
+  const people = new Map([ctx.me, ...friends].map((u) => [u.id, u]))
+  const missing = [...new Set(friends.map((f) => f.invited_by))].filter((id) => id && !people.has(id))
+  for (const u of await usersByIds(missing)) people.set(u.id, u)
+
+  return { me: ctx.me, friends, attendances, events: new Map(events.map((e) => [e.id, e])), people }
+}
+
+// "Vouched by you", "Vouched for you", "Vouched by Lila" or "In your network".
+function relationTo(me, friend, people) {
+  if (friend.invited_by === me.id) return 'Vouched by you'
+  if (me.invited_by === friend.id) return 'Vouched for you'
+  const voucher = people.get(friend.invited_by)
+  return voucher ? `Vouched by ${voucher.name}` : 'In your network'
+}
+
+const isUpcoming = (event) => new Date(event.starts_at) >= startOfToday()
+const byDate = (a, b) => new Date(a.starts_at) - new Date(b.starts_at)
+
+// Friends with one line each about why they're in the list, plus how many invites are left.
+export async function getFriendsOverview(userId) {
+  const [net, invites] = await Promise.all([networkData(userId), myInvites(userId)])
+  if (!net.me) return { me: null }
+  const { me, friends, attendances, events, people } = net
+
+  const eventsOf = (uid) => attendances.filter((a) => a.user_id === uid).map((a) => events.get(a.event_id)).filter(Boolean)
+  const mine = new Set(eventsOf(me.id).map((e) => e.id))
+
+  const rows = friends.map((friend) => {
+    const theirs = eventsOf(friend.id)
+    const next = theirs.filter(isUpcoming).sort(byDate)[0] ?? null
+    const together = theirs.filter((e) => mine.has(e.id) && !isUpcoming(e)).sort(byDate).reverse()
+    const isNew = Date.now() - new Date(friend.created_at).getTime() < NEW_MEMBER_DAYS * DAY_MS
+
+    let line
+    if (next) line = `Going to ${next.title}`
+    else if (friend.invited_by === me.id) line = `You vouched for her${isNew ? ' · new member' : ''}`
+    else if (me.invited_by === friend.id) line = 'Vouched for you'
+    else if (together.length)
+      line = `Met at ${together[0].title}${together.length > 1 ? ` · ${together.length} events together` : ''}`
+    else line = relationTo(me, friend, people)
+
+    return { ...friend, line, nextEvent: next }
+  })
+
+  // Friends with plans first (soonest first), then everyone else by name.
+  rows.sort(
+    (a, b) =>
+      Number(Boolean(b.nextEvent)) - Number(Boolean(a.nextEvent)) ||
+      (a.nextEvent && b.nextEvent ? byDate(a.nextEvent, b.nextEvent) : 0) ||
+      a.name.localeCompare(b.name),
+  )
+  return { me, friends: rows, invitesLeft: invitesLeft(invites) }
+}
+
+// What the user's network has been doing, newest first:
+// { type: 'going', friend, relation, at, event, otherFriends, iAmGoing } and
+// { type: 'joined', friend, relation, at }.
+export async function getNetworkActivity(userId) {
+  const net = await networkData(userId)
+  if (!net.me) return { me: null }
+  const { me, friends, attendances, events, people } = net
+  const friendIds = new Set(friends.map((f) => f.id))
+  const since = Date.now() - ACTIVITY_DAYS * DAY_MS
+
+  const items = []
+  for (const a of attendances) {
+    const event = events.get(a.event_id)
+    if (!friendIds.has(a.user_id) || !event || !isUpcoming(event)) continue
+    const friend = people.get(a.user_id)
+    const going = attendances.filter((x) => x.event_id === event.id)
+    items.push({
+      type: 'going',
+      id: `going:${friend.id}:${event.id}`,
+      at: a.created_at,
+      friend,
+      relation: relationTo(me, friend, people),
+      event,
+      otherFriends: going.filter((x) => x.user_id !== friend.id && friendIds.has(x.user_id)).length,
+      iAmGoing: going.some((x) => x.user_id === me.id),
+    })
+  }
+  for (const friend of friends) {
+    if (new Date(friend.created_at).getTime() < since) continue
+    items.push({ type: 'joined', id: `joined:${friend.id}`, at: friend.created_at, friend, relation: relationTo(me, friend, people) })
+  }
+
+  items.sort((a, b) => new Date(b.at) - new Date(a.at))
+  return { me, items: items.slice(0, 12) }
+}
+
 // ---------- Members & safety ----------
 
 const SAVE_ERROR = "We couldn't save that. Please try again."
@@ -450,7 +704,7 @@ export async function getMember(viewerId, memberId) {
   const ctx = await socialContext(viewerId)
   if (!ctx.me) return { me: null }
   // Postgres rejects malformed uuids; treat them as "not found".
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(memberId)) {
+  if (!UUID_RE.test(memberId)) {
     return { me: ctx.me, member: null }
   }
 
@@ -619,19 +873,23 @@ function newInviteCode(name) {
   return `${prefix}-${[...bytes].map((b) => CODE_CHARS[b % CODE_CHARS.length]).join('')}`
 }
 
-// Profile page data: me, my network, my invites (with who used them) and my upcoming events.
-export async function getMyProfile(userId) {
-  const [feed, friends] = await Promise.all([getFeed(userId), getFriends(userId)])
-  if (!feed.me) return { me: null }
-
-  let invites
+async function myInvites(userId) {
   if (supabase) {
     const { data, error } = await supabase.from('invites').select('*').eq('owner_id', userId)
     if (error) throw new Error(NETWORK_ERROR)
-    invites = data
-  } else {
-    invites = mockDb.invites.filter((i) => i.owner_id === userId)
+    return data
   }
+  return mockDb.invites.filter((i) => i.owner_id === userId)
+}
+
+// Single-use codes count against the limit, used or not. The reusable demo code doesn't.
+const invitesLeft = (invites) => Math.max(0, INVITE_LIMIT - invites.filter((i) => !i.reusable).length)
+
+// Profile page data: me, my network, my invites (with who used them) and my upcoming events.
+export async function getMyProfile(userId) {
+  const [feed, friends, invites] = await Promise.all([getFeed(userId), getFriends(userId), myInvites(userId)])
+  if (!feed.me) return { me: null }
+
   const usedBy = await usersByIds(invites.map((i) => i.used_by).filter(Boolean))
   const names = new Map(usedBy.map((u) => [u.id, u.name]))
 
@@ -642,12 +900,14 @@ export async function getMyProfile(userId) {
       .filter((i) => !i.reusable)
       .map((i) => ({ code: i.code, usedBy: i.used_by ? { id: i.used_by, name: names.get(i.used_by) ?? 'A member' } : null })),
     invitedCount: invites.filter((i) => i.used_by).length,
+    invitesLeft: invitesLeft(invites),
     going: feed.events.filter((e) => e.isGoing),
   }
 }
 
 // Creates a single-use invite code owned by the user. Returns the code.
 export async function createInvite(user) {
+  if (invitesLeft(await myInvites(user.id)) === 0) throw new Error("You've used all your invites.")
   for (let attempt = 0; attempt < 3; attempt++) {
     const invite = { code: newInviteCode(user.name), owner_id: user.id, used_by: null, reusable: false }
     if (supabase) {

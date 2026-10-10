@@ -1,11 +1,11 @@
-import { Check, MapPin, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../../components/ui/Button.jsx'
 import Chip from '../../components/ui/Chip.jsx'
 import Header from '../../components/ui/Header.jsx'
 import Input from '../../components/ui/Input.jsx'
-import { AREAS, INTERESTS } from '../../lib/constants.js'
+import { AREAS, EVENT_FORMATS, INTERESTS } from '../../lib/constants.js'
 import { createEvent } from '../../lib/db.js'
 import { getCurrentUser } from '../../lib/session.js'
 
@@ -26,13 +26,17 @@ const todayKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+const LEGEND = 'mb-2 font-display text-sm font-bold tracking-[0.12em] uppercase'
+
 function validate(form) {
   const errors = {}
   if (form.title.trim().length < 3) errors.title = 'Give your event a title.'
   if (!form.description.trim()) errors.description = 'Add a short description so others know what to expect.'
   if (!form.tags.length) errors.tags = 'Pick at least one topic.'
-  if (!form.date || !form.time) errors.when = 'Choose a date and time.'
+  if (!form.format) errors.format = 'Pick what kind of event it is.'
+  if (!form.date || !form.time) errors.when = 'Choose a date and start time.'
   else if (new Date(`${form.date}T${form.time}`) <= new Date()) errors.when = 'The event has to be in the future.'
+  else if (form.endTime && form.endTime <= form.time) errors.when = 'The end time has to be after the start.'
   if (!form.area) errors.area = 'Choose the neighbourhood.'
   if (normalizeUrl(form.url) === null) errors.url = "That doesn't look like a web address."
   return errors
@@ -40,7 +44,18 @@ function validate(form) {
 
 export default function NewEventPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ title: '', description: '', tags: [], date: '', time: '', area: '', venue: '', url: '' })
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    tags: [],
+    format: '',
+    date: '',
+    time: '',
+    endTime: '',
+    area: '',
+    venue: '',
+    url: '',
+  })
   const [touched, setTouched] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -70,7 +85,9 @@ export default function NewEventPage() {
           title: form.title,
           description: form.description,
           tags: form.tags,
+          format: form.format,
           starts_at: new Date(`${form.date}T${form.time}`).toISOString(),
+          ends_at: form.endTime ? new Date(`${form.date}T${form.endTime}`).toISOString() : null,
           area: form.area,
           venue: form.venue,
           url: normalizeUrl(form.url),
@@ -86,9 +103,10 @@ export default function NewEventPage() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-1 flex-col">
-      <Header title="Publish an event" back="/events" />
+      <Header back="/events" />
 
-      <p className="mb-6 text-text-main/75">
+      <h1 className="mb-2 font-display text-4xl leading-tight font-extrabold tracking-tight">Publish an event</h1>
+      <p className="mb-6 text-lg text-muted">
         Share a meetup idea or an external talk or workshop you'd like company for. You'll be signed up
         automatically.
       </p>
@@ -114,46 +132,48 @@ export default function NewEventPage() {
         />
 
         <fieldset className="flex flex-col gap-2" data-error={errors.tags ? '' : undefined}>
-          <legend className="mb-2 text-sm font-semibold">Topics</legend>
+          <legend className={LEGEND}>Topics</legend>
           <div className="flex flex-wrap gap-2">
             {INTERESTS.map((tag) => (
-              <Chip
-                key={tag}
-                selected={form.tags.includes(tag)}
-                icon={form.tags.includes(tag) ? Check : undefined}
-                onClick={() => toggleTag(tag)}
-              >
+              <Chip key={tag} selected={form.tags.includes(tag)} onClick={() => toggleTag(tag)}>
                 {tag}
               </Chip>
             ))}
           </div>
-          {errors.tags && <p className="text-sm text-primary">{errors.tags}</p>}
+          {errors.tags && <p className="text-sm font-bold text-primary">{errors.tags}</p>}
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-2" data-error={errors.format ? '' : undefined}>
+          <legend className={LEGEND}>Kind of event</legend>
+          <div className="flex flex-wrap gap-2">
+            {EVENT_FORMATS.map((f) => (
+              <Chip key={f} selected={form.format === f} onClick={() => setForm((x) => ({ ...x, format: f }))}>
+                {f}
+              </Chip>
+            ))}
+          </div>
+          {errors.format && <p className="text-sm font-bold text-primary">{errors.format}</p>}
         </fieldset>
 
         <div className="flex flex-col gap-1.5" data-error={errors.when ? '' : undefined}>
+          <Input label="Date" type="date" min={todayKey()} value={form.date} onChange={set('date')} />
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Date" type="date" min={todayKey()} value={form.date} onChange={set('date')} />
-            <Input label="Time" type="time" value={form.time} onChange={set('time')} />
+            <Input label="Starts" type="time" value={form.time} onChange={set('time')} />
+            <Input label="Ends (optional)" type="time" value={form.endTime} onChange={set('endTime')} />
           </div>
-          {errors.when && <p className="text-sm text-primary">{errors.when}</p>}
+          {errors.when && <p className="text-sm font-bold text-primary">{errors.when}</p>}
         </div>
 
         <fieldset className="flex flex-col gap-2" data-error={errors.area ? '' : undefined}>
-          <legend className="mb-2 text-sm font-semibold">Neighbourhood</legend>
+          <legend className={LEGEND}>Neighbourhood</legend>
           <div className="flex flex-wrap gap-2">
             {AREAS.map((a) => (
-              <Chip
-                key={a.name}
-                tone="pink"
-                icon={MapPin}
-                selected={form.area === a.name}
-                onClick={() => setForm((f) => ({ ...f, area: a.name }))}
-              >
+              <Chip key={a.name} selected={form.area === a.name} onClick={() => setForm((f) => ({ ...f, area: a.name }))}>
                 {a.name}
               </Chip>
             ))}
           </div>
-          {errors.area && <p className="text-sm text-primary">{errors.area}</p>}
+          {errors.area && <p className="text-sm font-bold text-primary">{errors.area}</p>}
         </fieldset>
 
         <Input
@@ -180,11 +200,11 @@ export default function NewEventPage() {
 
       <div className="mt-auto flex flex-col gap-3 pt-8">
         {submitError && (
-          <p role="alert" className="text-center text-sm text-primary">
+          <p role="alert" className="text-center text-sm font-bold text-primary">
             {submitError}
           </p>
         )}
-        <Button full type="submit" icon={submitting ? undefined : Send} loading={submitting}>
+        <Button full size="lg" type="submit" icon={submitting ? undefined : Send} loading={submitting}>
           {submitting ? 'Publishing…' : 'Publish event'}
         </Button>
       </div>

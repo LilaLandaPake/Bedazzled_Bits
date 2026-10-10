@@ -45,6 +45,11 @@ Copy `.env.example` to `.env.local`.
 2. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql), then [`supabase/seed.sql`](supabase/seed.sql).
 3. Put the project URL and anon key in `.env.local` (and in Vercel).
 
+**Already have a database from an earlier version?** Run
+[`supabase/migrations/001_figma_handoff.sql`](supabase/migrations/001_figma_handoff.sql) once, then
+`seed.sql` again. It adds event formats and end times, the `direct_messages` table (with realtime),
+and maps old interest tags to the new list.
+
 `seed.sql` is generated from `src/mocks`. After changing the mocks, run `npm run seed:sql`.
 
 > There is no real authentication: the anon key can read and write every table. That is

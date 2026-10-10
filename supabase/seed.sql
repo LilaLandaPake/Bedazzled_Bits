@@ -3,12 +3,12 @@
 -- `npm run seed:sql`. Run this after schema.sql in the Supabase SQL editor.
 
 insert into users (id, name, role, interests, area, lat, lng, invited_by, is_demo, created_at) values
-  ('a0000000-0000-4000-8000-000000000001', 'Lila', 'Frontend developer', array['Coding', 'AI & Tech', 'Design & UX']::text[], 'Gràcia', 41.4036, 2.1561, null, true, '2026-09-01T10:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000002', 'Marta', 'Product designer', array['Design & UX', 'Entrepreneurship', 'Creative Writing']::text[], 'Eixample', 41.3917, 2.1649, 'a0000000-0000-4000-8000-000000000001', true, '2026-09-03T18:20:00Z'),
-  ('a0000000-0000-4000-8000-000000000003', 'Aisha', 'Data analyst', array['Data & Analytics', 'AI & Tech', 'Career & Leadership']::text[], 'Poblenou', 41.4036, 2.2003, 'a0000000-0000-4000-8000-000000000001', true, '2026-09-05T09:15:00Z'),
-  ('a0000000-0000-4000-8000-000000000004', 'Sofía', 'Marketing lead', array['Entrepreneurship', 'Career & Leadership', 'Languages']::text[], 'Sant Antoni', 41.3781, 2.1617, 'a0000000-0000-4000-8000-000000000002', true, '2026-09-10T20:05:00Z'),
-  ('a0000000-0000-4000-8000-000000000005', 'Núria', 'Bootcamp student', array['Coding', 'AI & Tech', 'Languages']::text[], 'Sants', 41.3755, 2.1366, 'a0000000-0000-4000-8000-000000000003', true, '2026-09-14T12:40:00Z'),
-  ('a0000000-0000-4000-8000-000000000006', 'Camille', 'Freelance writer', array['Creative Writing', 'Languages', 'Design & UX']::text[], 'Ciutat Vella', 41.3833, 2.1777, 'a0000000-0000-4000-8000-000000000004', true, '2026-09-20T16:30:00Z')
+  ('a0000000-0000-4000-8000-000000000001', 'Lila', 'Frontend developer', array['Programming and web development', 'AI and machine learning', 'Design and UX']::text[], 'Gràcia', 41.4036, 2.1561, null, true, '2026-09-01T10:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000002', 'Marta', 'Product designer', array['Design and UX', 'Entrepreneurship and startups', 'Art, culture and creativity']::text[], 'Eixample', 41.3917, 2.1649, 'a0000000-0000-4000-8000-000000000001', true, '2026-09-03T18:20:00Z'),
+  ('a0000000-0000-4000-8000-000000000003', 'Aisha', 'Data analyst', array['Data and analytics', 'AI and machine learning', 'Career and leadership']::text[], 'Poblenou', 41.4036, 2.2003, 'a0000000-0000-4000-8000-000000000001', true, '2026-09-05T09:15:00Z'),
+  ('a0000000-0000-4000-8000-000000000004', 'Sofía', 'Marketing lead', array['Entrepreneurship and startups', 'Marketing and communication', 'Languages']::text[], 'Sant Antoni', 41.3781, 2.1617, 'a0000000-0000-4000-8000-000000000002', true, '2026-09-10T20:05:00Z'),
+  ('a0000000-0000-4000-8000-000000000005', 'Núria', 'Bootcamp student', array['Programming and web development', 'AI and machine learning', 'Languages']::text[], 'Sants', 41.3755, 2.1366, 'a0000000-0000-4000-8000-000000000003', true, '2026-09-14T12:40:00Z'),
+  ('a0000000-0000-4000-8000-000000000006', 'Camille', 'Freelance writer', array['Art, culture and creativity', 'Languages', 'Design and UX']::text[], 'Ciutat Vella', 41.3833, 2.1777, 'a0000000-0000-4000-8000-000000000004', true, '2026-09-20T16:30:00Z')
 on conflict do nothing;
 
 insert into invites (code, owner_id, used_by, reusable) values
@@ -37,38 +37,46 @@ insert into connections (user_id, connected_user_id, created_at) values
   ('a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000005', '2026-09-15T10:00:00Z')
 on conflict do nothing;
 
-insert into events (id, title, description, tags, starts_at, venue, lat, lng, url, created_by, is_user_created, created_at) values
-  ('e0000000-0000-4000-8000-000000000001', 'The hackathon you are at right now', 'Teams build products in a single day and present them to the jury. Come say hi to the team behind this app.', array['AI & Tech', 'Coding', 'Entrepreneurship']::text[], '2026-10-10T09:00:00+02:00', 'Hackathon venue, Barcelona', 41.3917, 2.1649, null, 'a0000000-0000-4000-8000-000000000001', false, '2026-09-01T10:00:00Z'),
-  ('e0000000-0000-4000-8000-000000000002', 'Intro to AI agents: evening talk', 'A beginner-friendly talk on how AI agents work, followed by Q&A and drinks.', array['AI & Tech']::text[], '2026-10-15T19:00:00+02:00', 'Poblenou, Barcelona', 41.4031, 2.1946, null, 'a0000000-0000-4000-8000-000000000003', false, '2026-09-20T09:00:00Z'),
-  ('e0000000-0000-4000-8000-000000000003', 'UX research hands-on workshop', 'Two hours of practical exercises: interview scripts, synthesis and affinity mapping.', array['Design & UX']::text[], '2026-10-18T11:00:00+02:00', 'Eixample, Barcelona', 41.3934, 2.1626, null, 'a0000000-0000-4000-8000-000000000002', false, '2026-09-22T14:00:00Z'),
-  ('e0000000-0000-4000-8000-000000000004', 'Data & Analytics meetup', 'Lightning talks on dashboards, SQL tricks and getting your first data job.', array['Data & Analytics', 'Career & Leadership']::text[], '2026-10-22T18:30:00+02:00', '22@ district, Barcelona', 41.4005, 2.1965, null, 'a0000000-0000-4000-8000-000000000003', false, '2026-09-25T11:00:00Z'),
-  ('e0000000-0000-4000-8000-000000000005', 'Founder pitch night', 'Early-stage founders pitch for five minutes each. Great for anyone curious about startups.', array['Entrepreneurship']::text[], '2026-10-29T19:30:00+01:00', 'El Born, Barcelona', 41.3851, 2.1824, null, 'a0000000-0000-4000-8000-000000000004', false, '2026-09-28T17:00:00Z'),
-  ('e0000000-0000-4000-8000-000000000006', 'Creative writing circle', 'A small group that meets in a café to write for an hour and share short pieces. All levels.', array['Creative Writing', 'Languages']::text[], '2026-10-17T17:00:00+02:00', 'Café in Gràcia, Barcelona', 41.4021, 2.1565, null, 'a0000000-0000-4000-8000-000000000006', true, '2026-10-01T08:00:00Z'),
-  ('e0000000-0000-4000-8000-000000000007', 'Spanish–English language exchange', 'Half an hour in each language over coffee. Bring a friend!', array['Languages']::text[], '2026-10-20T19:00:00+02:00', 'Sant Antoni, Barcelona', 41.3781, 2.1617, null, 'a0000000-0000-4000-8000-000000000004', true, '2026-10-02T12:00:00Z'),
-  ('e0000000-0000-4000-8000-000000000008', 'React study session', 'Laptops out, we work through a small React project together. Questions welcome.', array['Coding']::text[], '2026-10-24T10:30:00+02:00', 'Library, Sants', 41.3755, 2.1366, null, 'a0000000-0000-4000-8000-000000000001', true, '2026-10-03T19:00:00Z')
+insert into events (id, title, description, tags, format, starts_at, ends_at, venue, lat, lng, url, created_by, is_user_created, created_at) values
+  ('e0000000-0000-4000-8000-000000000001', 'Coding-agent hackathon', 'Teams build products with coding agents in a single day and present them to the jury. Beginners welcome: you can join a team on the spot. Come say hi to the team behind this app.', array['AI and machine learning', 'Programming and web development', 'Entrepreneurship and startups']::text[], 'Hackathon', '2026-10-10T09:00:00+02:00', '2026-10-10T20:00:00+02:00', 'Hackathon venue, Eixample', 41.3917, 2.1649, null, 'a0000000-0000-4000-8000-000000000001', false, '2026-09-01T10:00:00Z'),
+  ('e0000000-0000-4000-8000-000000000002', 'Intro to AI agents: evening talk', 'A beginner-friendly talk on how AI agents work, followed by Q&A and drinks.', array['AI and machine learning']::text[], 'Talk', '2026-10-15T19:00:00+02:00', '2026-10-15T21:00:00+02:00', 'Coworking space, Poblenou', 41.4031, 2.1946, null, 'a0000000-0000-4000-8000-000000000003', false, '2026-09-20T09:00:00Z'),
+  ('e0000000-0000-4000-8000-000000000003', 'UX research hands-on workshop for beginners', 'Two hours of practical exercises: interview scripts, synthesis and affinity mapping.', array['Design and UX']::text[], 'Workshop', '2026-10-18T11:00:00+02:00', '2026-10-18T13:00:00+02:00', 'Design studio, Eixample', 41.3934, 2.1626, null, 'a0000000-0000-4000-8000-000000000002', false, '2026-09-22T14:00:00Z'),
+  ('e0000000-0000-4000-8000-000000000004', 'Data and analytics meetup', 'Lightning talks on dashboards, SQL tricks and getting your first data job.', array['Data and analytics', 'Career and leadership']::text[], 'Meetup', '2026-10-22T18:30:00+02:00', '2026-10-22T20:30:00+02:00', 'Tech hub, 22@', 41.4005, 2.1965, null, 'a0000000-0000-4000-8000-000000000003', false, '2026-09-25T11:00:00Z'),
+  ('e0000000-0000-4000-8000-000000000005', 'Founder pitch night', 'Early-stage founders pitch for five minutes each. Great for anyone curious about startups.', array['Entrepreneurship and startups']::text[], 'Networking', '2026-10-29T19:30:00+01:00', '2026-10-29T22:00:00+01:00', 'Startup space, El Born', 41.3851, 2.1824, null, 'a0000000-0000-4000-8000-000000000004', false, '2026-09-28T17:00:00Z'),
+  ('e0000000-0000-4000-8000-000000000006', 'Creative writing circle', 'A small group that meets in a café to write for an hour and share short pieces. All levels.', array['Art, culture and creativity', 'Languages']::text[], 'Meetup', '2026-10-17T17:00:00+02:00', '2026-10-17T19:00:00+02:00', 'Café, Gràcia', 41.4021, 2.1565, null, 'a0000000-0000-4000-8000-000000000006', true, '2026-10-01T08:00:00Z'),
+  ('e0000000-0000-4000-8000-000000000007', 'Spanish–English language exchange', 'Half an hour in each language over coffee. Bring a friend!', array['Languages']::text[], 'Meetup', '2026-10-20T19:00:00+02:00', '2026-10-20T20:30:00+02:00', 'Bar, Sant Antoni', 41.3781, 2.1617, null, 'a0000000-0000-4000-8000-000000000004', true, '2026-10-02T12:00:00Z'),
+  ('e0000000-0000-4000-8000-000000000008', 'React study session', 'Laptops out, we work through a small React project together. Questions welcome.', array['Programming and web development']::text[], 'Workshop', '2026-10-24T10:30:00+02:00', '2026-10-24T13:00:00+02:00', 'Public library, Sants', 41.3755, 2.1366, null, 'a0000000-0000-4000-8000-000000000001', true, '2026-10-03T19:00:00Z')
 on conflict do nothing;
 
 insert into attendances (user_id, event_id, created_at) values
-  ('a0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000001', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000001', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000002', '2026-10-05T12:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001', '2026-10-10T07:30:00Z'),
+  ('a0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000001', '2026-10-09T16:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000001', '2026-10-08T11:20:00Z'),
+  ('a0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000001', '2026-10-07T19:45:00Z'),
+  ('a0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000002', '2026-10-06T09:10:00Z'),
   ('a0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000002', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000002', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000003', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000003', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000004', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000005', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000005', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000006', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000007', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000007', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000008', '2026-10-05T12:00:00Z'),
-  ('a0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000008', '2026-10-05T12:00:00Z')
+  ('a0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000002', '2026-10-09T21:30:00Z'),
+  ('a0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000003', '2026-10-08T08:15:00Z'),
+  ('a0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000003', '2026-10-06T17:40:00Z'),
+  ('a0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000004', '2026-10-04T10:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000005', '2026-10-03T18:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000005', '2026-10-09T10:30:00Z'),
+  ('a0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000006', '2026-10-01T08:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000007', '2026-10-02T12:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000007', '2026-10-05T20:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000008', '2026-10-03T19:00:00Z'),
+  ('a0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000008', '2026-10-08T22:10:00Z')
 on conflict do nothing;
 
 insert into messages (id, event_id, user_id, text, flagged, flag_category, flag_reason, created_at) values
   ('f0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000003', 'Hi! Anyone want to meet at the entrance 10 minutes before?', false, null, null, '2026-10-08T18:00:00Z'),
   ('f0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', 'Yes! I''ll be there at 18:50 with a pink tote bag.', false, null, null, '2026-10-08T18:04:00Z'),
-  ('f0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000005', 'Easier to chat on WhatsApp, can someone send me their number?', true, 'off_platform', 'Asks to move the conversation to another app and share a phone number.', '2026-10-08T18:10:00Z')
+  ('f0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000005', 'Easier to chat on WhatsApp, can someone send me their number?', true, 'off_platform', 'Asks to move the conversation to another app and share a phone number.', '2026-10-08T18:10:00Z'),
+  ('f0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001', 'First time at a hackathon — anyone want to meet at the entrance?', false, null, null, '2026-10-10T07:40:00Z'),
+  ('f0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000003', 'Yes! I''ll be there 10 min early.', false, null, null, '2026-10-10T07:44:00Z'),
+  ('f0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000002', 'Let''s meet at my place first, it''s close.', true, 'private_place', 'Suggests meeting somewhere private instead of at the event.', '2026-10-10T07:52:00Z')
+on conflict do nothing;
+
+insert into direct_messages (id, user_id, to_user, text, flagged, flag_category, flag_reason, created_at) values
+  ('d0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000002', 'Are you going to the hackathon? I signed up!', false, null, null, '2026-10-09T15:00:00Z')
 on conflict do nothing;

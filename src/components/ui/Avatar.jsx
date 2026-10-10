@@ -1,19 +1,14 @@
-const COLORS = ['bg-primary text-white', 'bg-accent-purple text-main', 'bg-accent-gold text-main']
+const COLORS = ['bg-avatar-1', 'bg-avatar-2', 'bg-avatar-3']
 
 const SIZES = {
-  sm: 'h-8 w-8 text-xs',
-  md: 'h-11 w-11 text-sm',
-  lg: 'h-20 w-20 text-2xl',
+  xs: 'h-9 w-9 text-sm',
+  sm: 'h-11 w-11 text-base',
+  md: 'h-14 w-14 text-xl',
+  lg: 'h-16 w-16 text-2xl',
+  xl: 'h-24 w-24 text-4xl',
 }
 
-function initials(name = '') {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0].toUpperCase())
-    .join('')
-}
+const initial = (name = '') => name.trim().charAt(0).toUpperCase() || '?'
 
 // Same name always gets the same colour.
 function colorFor(name = '') {
@@ -22,13 +17,17 @@ function colorFor(name = '') {
   return COLORS[Math.abs(hash) % COLORS.length]
 }
 
-export default function Avatar({ name, size = 'md', className = '' }) {
+// Initial in a coloured circle. `color` overrides the hashed colours, background and text
+// (e.g. 'bg-gold text-on-gold').
+export default function Avatar({ name, size = 'md', color, className = '' }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold ${SIZES[size]} ${colorFor(name)} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-display font-bold ${SIZES[size]} ${
+        color ?? `${colorFor(name)} text-avatar-ink`
+      } ${className}`}
     >
-      {initials(name)}
+      {initial(name)}
     </span>
   )
 }

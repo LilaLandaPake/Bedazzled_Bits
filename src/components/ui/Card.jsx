@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
 
-// A surface on the card colour. Becomes a tappable <Link> when `to` is given.
+// White (dark: plum) surface with the beige hairline border. Becomes a tappable <Link>
+// when `to` is given.
 export default function Card({ to, className = '', children, ...rest }) {
-  const classes = `block rounded-2xl bg-card p-4 ring-1 ring-white/5 ${
-    to ? 'transition active:scale-[0.99] active:ring-accent-purple/40' : ''
+  const classes = `block rounded-3xl border border-line bg-surface p-5 ${
+    to ? 'transition active:scale-[0.99] active:border-primary/50' : ''
   } ${className}`
 
   if (to) {

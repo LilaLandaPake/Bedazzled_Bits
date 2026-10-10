@@ -1,26 +1,96 @@
 @import 'tailwindcss';
 
-/* Nit (dark theme) palette — single source of truth for colors */
+/* Design tokens from the Figma handoff ("Type & Hierarchy").
+   Night (the "Nit" palette) is the default. Day (cream + plum) is switched on with
+   data-theme="light" on <html>; see src/lib/theme.js and ThemeToggle. */
 :root {
-  --bg-main: #170a2b;
-  --bg-card: #25143e;
-  --primary: #ff2d9a;
-  --accent-purple: #a78bfa;
-  --accent-gold: #ffb703;
-  --text-main: #fff6ec;
+  --bg: #170a2b;
+  --surface: #25143e;
+  --soft: #2e1b4d; /* tags, notes, demo-code box */
+  --line: #3a2560; /* card and input borders */
+  --ink: #fff6ec;
+  --muted: #c9b8e8; /* eyebrows, meta lines */
+  --primary: #ff2d9a; /* main buttons, active tab */
+  --on-primary: #170a2b;
+  --highlight: #ff2d9a; /* the accent word in big headlines */
+  --accent: #a78bfa; /* selected filters */
+  --on-accent: #170a2b;
+  --gold: #ffb703;
+  --on-gold: #170a2b;
+  --soft-ink: #a78bfa; /* text on --soft */
+  --ai: #a78bfa; /* AI reason lines */
+  --feature: #2e1b4d; /* "For you" card */
+  --feature-ink: #fff6ec;
+  --feature-muted: #c9b8e8;
+  --feature-line: #4a3478;
+  --scrim: rgb(10 4 20 / 0.7);
+  --avatar-1: #a78bfa;
+  --avatar-2: #ffb703;
+  --avatar-3: #ff2d9a;
+  --avatar-ink: #170a2b;
 
   color-scheme: dark;
 }
 
-/* Expose the palette as Tailwind utilities: bg-main, bg-card, bg-primary,
-   text-accent-purple, border-accent-gold, text-main, etc. */
+:root[data-theme='light'] {
+  --bg: #fff4e9;
+  --surface: #ffffff;
+  --soft: #ffe3d6;
+  --line: #f0dcc8;
+  --ink: #3d0a26;
+  --muted: #7b4b63;
+  --primary: #c8006a;
+  --on-primary: #ffffff;
+  --highlight: #e0007a;
+  --accent: #ff5a1f;
+  --on-accent: #3d0a26;
+  --gold: #ffb703;
+  --on-gold: #3d0a26;
+  --soft-ink: #3d0a26;
+  --ai: #c8006a;
+  --feature: #3d0a26;
+  --feature-ink: #fff4e9;
+  --feature-muted: #f6cfe0;
+  --feature-line: rgb(255 244 233 / 0.25);
+  --scrim: rgb(61 10 38 / 0.55);
+  --avatar-1: #ff5a1f;
+  --avatar-2: #ffb703;
+  --avatar-3: #ffe3d6;
+  --avatar-ink: #3d0a26;
+
+  color-scheme: light;
+}
+
+/* Exposed as Tailwind utilities: bg-bg, bg-surface, text-ink, text-muted, bg-primary, … */
 @theme inline {
-  --color-main: var(--bg-main);
-  --color-card: var(--bg-card);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-soft: var(--soft);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
   --color-primary: var(--primary);
-  --color-accent-purple: var(--accent-purple);
-  --color-accent-gold: var(--accent-gold);
-  --color-text-main: var(--text-main);
+  --color-on-primary: var(--on-primary);
+  --color-highlight: var(--highlight);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-gold: var(--gold);
+  --color-on-gold: var(--on-gold);
+  --color-soft-ink: var(--soft-ink);
+  --color-ai: var(--ai);
+  --color-feature: var(--feature);
+  --color-feature-ink: var(--feature-ink);
+  --color-feature-muted: var(--feature-muted);
+  --color-feature-line: var(--feature-line);
+  --color-scrim: var(--scrim);
+  --color-avatar-1: var(--avatar-1);
+  --color-avatar-2: var(--avatar-2);
+  --color-avatar-3: var(--avatar-3);
+  --color-avatar-ink: var(--avatar-ink);
+
+  --font-display: 'Bricolage Grotesque', 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+  --font-sans: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 html,
@@ -30,13 +100,15 @@ body {
 }
 
 body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-:focus-visible {
+/* Text fields show focus with their pink border instead; containers focused from code
+   (tabindex -1, e.g. a sheet) don't get a ring. */
+:focus-visible:not([tabindex='-1'], input, textarea) {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }

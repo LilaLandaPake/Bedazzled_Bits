@@ -37,7 +37,9 @@ create table events (
   title text not null,
   description text,
   tags text[] not null default '{}',
+  format text,
   starts_at timestamptz not null,
+  ends_at timestamptz,
   venue text,
   lat float,
   lng float,
@@ -58,6 +60,18 @@ create table messages (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references events (id) on delete cascade,
   user_id uuid not null references users (id) on delete cascade,
+  text text not null,
+  flagged bool not null default false,
+  flag_category text,
+  flag_reason text,
+  created_at timestamptz not null default now()
+);
+
+-- 1:1 messages between connected members (Friends -> Message). Same moderation flow.
+create table direct_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users (id) on delete cascade,
+  to_user uuid not null references users (id) on delete cascade,
   text text not null,
   flagged bool not null default false,
   flag_category text,
@@ -94,17 +108,19 @@ create table ratings (
 
 create index on messages (event_id, created_at);
 create index on attendances (event_id);
+create index on direct_messages (to_user, created_at);
 
 -- Demo-only access: anon can do everything (see note at the top).
 do $$
 declare t text;
 begin
-  foreach t in array array['users','invites','connections','events','attendances','messages','blocks','reports','ratings']
+  foreach t in array array['users','invites','connections','events','attendances','messages','direct_messages','blocks','reports','ratings']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('create policy "demo anon access" on %I for all to anon using (true) with check (true)', t);
   end loop;
 end $$;
 
--- Realtime for the event chat (inserts, and updates when moderation flags a message).
+-- Realtime for the chats (inserts, and updates when moderation flags a message).
 alter publication supabase_realtime add table messages;
+alter publication supabase_realtime add table direct_messages;

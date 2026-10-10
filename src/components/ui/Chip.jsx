@@ -1,28 +1,15 @@
-const TONES = {
-  purple: {
-    idle: 'bg-accent-purple/15 text-accent-purple',
-    selected: 'bg-accent-purple text-main',
-  },
-  gold: {
-    idle: 'bg-accent-gold/15 text-accent-gold',
-    selected: 'bg-accent-gold text-main',
-  },
-  pink: {
-    idle: 'bg-primary/15 text-primary',
-    selected: 'bg-primary text-white',
-  },
-}
+import { Check } from 'lucide-react'
 
-// Tags, filters and badges. Purple for tags, gold for AI/friend highlights.
-// Becomes a toggle button when `onClick` is given.
-export default function Chip({ tone = 'purple', selected = false, icon: Icon, onClick, className = '', children }) {
-  const classes = `inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ${
-    TONES[tone][selected ? 'selected' : 'idle']
+// Rounded pill for interests and filters. Selected pills are filled orange (dark: purple)
+// with a check. Becomes a toggle button when `onClick` is given.
+export default function Chip({ selected = false, check = true, onClick, className = '', children }) {
+  const classes = `inline-flex items-center gap-2 rounded-full border-2 px-4 py-2 text-left text-base ${
+    selected ? 'border-accent bg-accent font-display font-bold text-on-accent' : 'border-line text-ink'
   } ${className}`
 
   const content = (
     <>
-      {Icon && <Icon size={14} />}
+      {selected && check && <Check size={18} strokeWidth={2.5} />}
       {children}
     </>
   )
@@ -36,4 +23,15 @@ export default function Chip({ tone = 'purple', selected = false, icon: Icon, on
   }
 
   return <span className={classes}>{content}</span>
+}
+
+// Small uppercase label on event cards: "AI", "HACKATHON".
+export function Tag({ className = '', children }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-lg bg-soft px-3 py-1.5 font-display text-xs font-bold tracking-[0.12em] text-soft-ink uppercase ${className}`}
+    >
+      {children}
+    </span>
+  )
 }

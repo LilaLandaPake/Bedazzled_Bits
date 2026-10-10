@@ -4,9 +4,9 @@ import * as mocks from '../mocks/index.js'
 
 const KEY = 'idwtga_mock_db'
 // Bump when src/mocks changes shape so stale saved copies are discarded.
-const VERSION = 1
+const VERSION = 2
 
-const TABLES = ['users', 'invites', 'connections', 'events', 'attendances', 'messages', 'blocks', 'reports', 'ratings']
+const TABLES = ['users', 'invites', 'connections', 'events', 'attendances', 'messages', 'direct_messages', 'blocks', 'reports', 'ratings']
 
 function fresh() {
   return Object.fromEntries(TABLES.map((t) => [t, structuredClone(mocks[t])]))

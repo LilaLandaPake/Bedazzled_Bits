@@ -77,13 +77,17 @@ seed.sql
 |---|---|---|
 | `/` | Welcome and invite code | Welcome splash, demo code display, code entry |
 | `/onboarding` | Onboarding form | Name, role, interests, area setup |
-| `/events` | Recommended events feed | AI recommendations, filter by tag, friend encouragement badges |
-| `/events/new` | Publish a new event | Create event form (internal idea or external URL) |
-| `/events/:id` | Event detail | Event info, attendee list (revealed after joining), friend badges, join action |
-| `/events/:id/chat` | Event chat | Realtime chat with live AI safety warning flags |
+| `/events` | Explore (tab) | AI-ranked feed, "Filter by interest" sheet, friend avatars on cards |
+| `/for-you` | For you (tab) | One card at a time of network activity: friends going to events, new members |
+| `/friends` | Friends (tab) | Network list with search, message buttons, "Vouch for a friend" (3 invites) |
+| `/profile` | Profile (tab) | Stats, upcoming events, invite codes, sign out / reset demo |
+| `/events/new` | Publish a new event | Create event form (topics, format, date, start/end, area, link) |
+| `/events/:id` | Event detail | Event info, who's going (list revealed after joining), join bar, demo link |
+| `/events/:id/chat` | Event chat | Realtime group chat with live AI safety warning flags, Report / Block |
 | `/events/:id/rate` | Member ratings | Post-event "Would you go with her again?" ratings |
-| `/profile` | My profile & network | User stats, invite code generator, network list |
-| `/u/:id` | Other member profile | User bio, vouch source, direct action buttons (Block / Report) |
+| `/messages/:id` | Direct messages | Realtime 1:1 chat with a connected member, same AI moderation |
+| `/u/:id` | Other member profile | Bio, vouch source, Message, Block / Report |
+| `/u/:id/report` | Report a member | Reason from the fixed list plus optional details |
 
 ## Session & Network Model
 
@@ -108,9 +112,13 @@ events       id uuid pk, title text, description text, tags text[],
              starts_at timestamptz, venue text, lat float, lng float,
              url text, created_by uuid (fk users.id), is_user_created bool default false,
              created_at timestamptz
+             format text (Talk | Workshop | Course | Hackathon | Meetup | Networking),
+             ends_at timestamptz
 attendances  user_id uuid, event_id uuid, created_at timestamptz (pk: user_id + event_id)
 messages     id uuid pk, event_id uuid, user_id uuid, text text,
              flagged bool default false, flag_category text, flag_reason text, created_at timestamptz
+direct_messages id uuid pk, user_id uuid (sender), to_user uuid, text text,
+             flagged bool, flag_category text, flag_reason text, created_at timestamptz
 blocks       blocker_id uuid, blocked_id uuid, created_at timestamptz (pk: both)
 reports      id uuid pk, reporter_id uuid, reported_id uuid, reason text,
              details text, status text default 'pending', created_at timestamptz
@@ -121,7 +129,14 @@ ratings      id uuid pk, event_id uuid, from_user uuid, to_user uuid,
 
 ## Theme & Styling System
 
-The app defaults to the **Nit (Dark Theme)** palette configured directly inside `src/index.css`:
+> **Updated for the Figma handoff ("Type & Hierarchy").** Light (cream `#FFF4E9`, plum ink
+> `#3D0A26`, magenta `#C8006A`, orange `#FF5A1F` for selected filters) is now the default, and
+> the Nit palette below is the automatic dark mode (`prefers-color-scheme`). All colours are
+> tokens in `src/index.css` (`bg-bg`, `bg-surface`, `bg-soft`, `text-ink`, `text-muted`,
+> `bg-primary`, `bg-accent`, `bg-gold`, …). Fonts: Bricolage Grotesque (display),
+> Atkinson Hyperlegible Next (body), Atkinson Hyperlegible Mono (invite codes).
+
+The original **Nit (Dark Theme)** palette configured directly inside `src/index.css`:
 
 ```css
 @import "tailwindcss";
@@ -153,14 +168,12 @@ body {
 
 ### Interests & Tags
 
-* `AI & Tech`
-* `Design & UX`
-* `Entrepreneurship`
-* `Coding`
-* `Data & Analytics`
-* `Languages`
-* `Career & Leadership`
-* `Creative Writing`
+Fifteen interests, defined in `src/lib/constants.js` with a short card label each:
+AI and machine learning (AI), Programming and web development (Coding), Data and analytics,
+Design and UX, Cybersecurity, Video games and creative tech, Entrepreneurship and startups,
+Career and leadership, Marketing and communication, Finance and investing, Science and research,
+Sustainability and social impact, Languages, Art, culture and creativity, Health and wellbeing.
+Tags saved under the old eight-item list are mapped on read and by the migration.
 
 ### Report Categories & Identifiers
 
@@ -259,3 +272,9 @@ is sent normally. Sending must never be blocked by the AI.
 
 Real identity verification, push notifications, payments, native app, admin panel.
 
+## Night and day mode
+
+Night (the "Nit" palette) is the default; day (cream + plum) is an override on `<html data-theme="light">`.
+All colours are tokens in `src/index.css` (`bg-bg`, `bg-surface`, `text-ink`, `text-muted`, `bg-primary`, …):
+never hardcode a colour in a component, or it will look wrong in one of the two modes. The switch is
+`ThemeToggle` (`src/lib/theme.js` stores the choice in localStorage; `index.html` applies it before first paint).

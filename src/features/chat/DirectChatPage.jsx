@@ -1,14 +1,15 @@
-import { Lock, SearchX } from 'lucide-react'
+import { UserPlus, UserX } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import Button from '../../components/ui/Button.jsx'
 import Header from '../../components/ui/Header.jsx'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States.jsx'
-import { flagMessage, getChat, sendMessage, subscribeToChat } from '../../lib/db.js'
+import { flagDirectMessage, getDirectChat, sendDirectMessage, subscribeToDirectChat } from '../../lib/db.js'
 import { clearSession, getCurrentUser } from '../../lib/session.js'
 import ChatRoom from './ChatRoom.jsx'
 
-export default function EventChatPage() {
+// 1:1 messages with a member of your network, opened from Friends and "For you".
+export default function DirectChatPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const me = getCurrentUser()
@@ -16,8 +17,9 @@ export default function EventChatPage() {
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    if (id === me) return
     let cancelled = false
-    getChat(id, me)
+    getDirectChat(me, id)
       .then((chat) => {
         if (cancelled) return
         if (!chat.me) {
@@ -25,8 +27,8 @@ export default function EventChatPage() {
           navigate('/', { replace: true })
           return
         }
-        if (!chat.event) return setState({ status: 'missing' })
-        if (!chat.isGoing) return setState({ status: 'locked', event: chat.event })
+        if (!chat.other) return setState({ status: 'missing' })
+        if (!chat.isConnected) return setState({ status: 'locked', other: chat.other })
         setState({ status: 'ready', ...chat })
       })
       .catch((err) => !cancelled && setState({ status: 'error', error: err.message }))
@@ -35,13 +37,15 @@ export default function EventChatPage() {
     }
   }, [id, me, attempt, navigate])
 
-  const header = <Header title={state.event?.title ?? 'Group chat'} back={`/events/${id}`} bordered />
+  if (id === me) return <Navigate to="/profile" replace />
+
+  const header = <Header title={state.other?.name ?? 'Messages'} back="/friends" bordered />
 
   if (state.status === 'loading') {
     return (
       <>
         {header}
-        <Loading label="Loading chat…" />
+        <Loading label="Loading messages…" />
       </>
     )
   }
@@ -66,10 +70,10 @@ export default function EventChatPage() {
       <>
         {header}
         <EmptyState
-          icon={SearchX}
-          title="Event not found"
-          message="This chat doesn't exist."
-          action={<Button to="/events">See all events</Button>}
+          icon={UserX}
+          title="Chat not available"
+          message="This member doesn't exist or isn't available to you."
+          action={<Button to="/friends">Back to friends</Button>}
         />
       </>
     )
@@ -80,10 +84,10 @@ export default function EventChatPage() {
       <>
         {header}
         <EmptyState
-          icon={Lock}
-          title="Join the event to chat"
-          message="The group chat is only for the women who are going."
-          action={<Button to={`/events/${id}`}>Go to the event</Button>}
+          icon={UserPlus}
+          title={`${state.other.name} isn't in your network`}
+          message="You can message women you're connected with. Add her from her profile first."
+          action={<Button to={`/u/${id}`}>See her profile</Button>}
         />
       </>
     )
@@ -93,17 +97,17 @@ export default function EventChatPage() {
     <ChatRoom
       key={id}
       me={me}
-      title={state.event.title}
-      subtitle={`${state.goingCount} going · group chat`}
-      back={`/events/${id}`}
-      placeholder="Message the group"
-      emptyMessage="Say hi and agree where to meet, for example at the entrance."
+      title={state.other.name}
+      subtitle={state.other.role || 'Vouched member'}
+      back="/friends"
+      placeholder={`Message ${state.other.name}`}
+      emptyMessage={`Say hi to ${state.other.name} and find an event to go to together.`}
       initialMessages={state.messages}
-      initialPeople={state.people}
-      blocked={state.blocked}
-      subscribe={(onMessage) => subscribeToChat(id, onMessage)}
-      send={(text) => sendMessage(id, me, text)}
-      flag={flagMessage}
+      initialPeople={{ [state.other.id]: { name: state.other.name } }}
+      blocked={[]}
+      subscribe={(onMessage) => subscribeToDirectChat(me, id, onMessage)}
+      send={(text) => sendDirectMessage(me, id, text)}
+      flag={flagDirectMessage}
     />
   )
 }

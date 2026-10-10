@@ -1,9 +1,10 @@
-import { ArrowRight, HeartHandshake, KeyRound } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import Button from '../../components/ui/Button.jsx'
-import Card from '../../components/ui/Card.jsx'
 import Input from '../../components/ui/Input.jsx'
+import ThemeToggle from '../../components/ui/ThemeToggle.jsx'
+import { Eyebrow } from '../../components/ui/PageTitle.jsx'
 import { DEMO_INVITE_CODE } from '../../lib/constants.js'
 import { checkInvite, normalizeCode } from '../../lib/db.js'
 import { getCurrentUser } from '../../lib/session.js'
@@ -30,38 +31,24 @@ export default function WelcomePage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col justify-center gap-8 py-10">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/40">
-          <HeartHandshake size={32} />
-        </span>
-        <h1 className="text-3xl font-extrabold leading-tight">I Don't Want to Go Alone</h1>
-        <p className="text-text-main/75">
-          Find women to go with to talks, workshops and courses in Barcelona. Every member is vouched for by
-          another member.
+    <div className="flex flex-1 flex-col gap-6 pt-[calc(env(safe-area-inset-top)+3rem)] pb-4">
+      <div className="flex flex-col gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <Eyebrow icon={ShieldCheck}>Barcelona · Invite only</Eyebrow>
+          <ThemeToggle />
+        </div>
+        <h1 className="font-display text-5xl leading-[1.05] font-extrabold tracking-tight">
+          I don't want to go <span className="text-highlight">alone.</span>
+        </h1>
+        <p className="text-lg leading-relaxed">
+          Find women to go with to talks, workshops and courses. Every member is vouched for by another member.
         </p>
       </div>
 
-      <Card className="flex items-center gap-3">
-        <KeyRound size={22} className="shrink-0 text-accent-gold" />
-        <p className="flex-1 text-sm">
-          Jury? Use the demo code <span className="font-mono font-bold text-accent-gold">{DEMO_INVITE_CODE}</span>
-        </p>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            setCode(DEMO_INVITE_CODE)
-            setError('')
-          }}
-        >
-          Use it
-        </Button>
-      </Card>
-
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} noValidate className="mt-auto flex flex-col gap-4">
         <Input
-          label="Your invite code"
+          label="Invite code"
+          mono
           placeholder="e.g. JURY2026"
           value={code}
           onChange={(e) => {
@@ -69,14 +56,38 @@ export default function WelcomePage() {
             setError('')
           }}
           error={error}
-          hint="You need a code from an existing member to join."
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
         />
-        <Button full type="submit" icon={checking ? undefined : ArrowRight} loading={checking} disabled={!code.trim()}>
+
+        <div className="flex items-center gap-3 rounded-3xl bg-soft px-5 py-4 text-soft-ink">
+          <p className="flex-1">
+            <span className="font-bold">Jury?</span> Use the demo code
+          </p>
+          <button
+            type="button"
+            aria-label={`Fill in the demo code ${DEMO_INVITE_CODE}`}
+            onClick={() => {
+              setCode(DEMO_INVITE_CODE)
+              setError('')
+            }}
+            className="rounded-xl border-2 border-dashed border-current px-4 py-2 font-mono text-lg font-bold tracking-wider transition active:scale-95"
+          >
+            {DEMO_INVITE_CODE}
+          </button>
+        </div>
+
+        <Button full size="lg" type="submit" loading={checking} disabled={!code.trim()}>
           {checking ? 'Checking code…' : 'Continue'}
         </Button>
+        <p className="text-center text-muted">No invite? Ask a member to vouch for you.</p>
+        <p className="text-center">
+          Already a member?{' '}
+          <Link to="/signin" className="font-display font-bold underline decoration-2 underline-offset-4">
+            Sign in
+          </Link>
+        </p>
       </form>
     </div>
   )

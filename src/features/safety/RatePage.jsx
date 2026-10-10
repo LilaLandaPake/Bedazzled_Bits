@@ -143,8 +143,8 @@ export default function RatePage() {
     <div className="flex flex-1 flex-col">
       {header}
 
-      <p className="mb-1 font-semibold">{event.title}</p>
-      <p className="mb-5 flex items-center gap-2 text-sm text-text-main/70">
+      <h1 className="mb-2 font-display text-3xl leading-tight font-extrabold tracking-tight">{event.title}</h1>
+      <p className="mb-5 flex items-center gap-2 text-sm text-muted">
         <EyeOff size={15} className="shrink-0" /> Private: only you see your answers.
       </p>
 
@@ -155,11 +155,11 @@ export default function RatePage() {
               <div className="flex items-center gap-3">
                 <Avatar name={p.name} />
                 <div>
-                  <p className="font-semibold">{p.name}</p>
-                  {p.role && <p className="text-sm text-text-main/60">{p.role}</p>}
+                  <p className="font-display text-lg font-bold">{p.name}</p>
+                  {p.role && <p className="text-sm text-muted">{p.role}</p>}
                 </div>
               </div>
-              <p className="text-sm">Would you go with her again?</p>
+              <p className="font-bold">Would you go with her again?</p>
               <div className="grid grid-cols-2 gap-2" role="group" aria-label={`Would you go with ${p.name} again?`}>
                 <Button
                   size="sm"
@@ -187,14 +187,14 @@ export default function RatePage() {
 
       <div className="mt-auto flex flex-col gap-3 pt-8">
         {saveError && (
-          <p role="alert" className="text-center text-sm text-primary">
+          <p role="alert" className="text-center text-sm font-bold text-primary">
             {saveError}
           </p>
         )}
-        <Button full loading={saving} disabled={answeredCount === 0} onClick={handleSave}>
+        <Button full size="lg" loading={saving} disabled={answeredCount === 0} onClick={handleSave}>
           {answeredCount === 0 ? 'Answer at least one' : `Save ${answeredCount} ${answeredCount === 1 ? 'answer' : 'answers'}`}
         </Button>
-        <p className="text-center text-xs text-text-main/50">
+        <p className="text-center text-xs text-muted">
           Had a problem with someone? Report her from her profile.
         </p>
       </div>

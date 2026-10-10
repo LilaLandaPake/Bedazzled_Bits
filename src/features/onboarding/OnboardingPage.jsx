@@ -1,10 +1,11 @@
-import { ArrowRight, BadgeCheck, Check, Home, MapPin } from 'lucide-react'
+import { ArrowRight, BadgeCheck, Home } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import Button from '../../components/ui/Button.jsx'
 import Chip from '../../components/ui/Chip.jsx'
 import Header from '../../components/ui/Header.jsx'
 import Input from '../../components/ui/Input.jsx'
+import { Eyebrow } from '../../components/ui/PageTitle.jsx'
 import { ErrorState, Loading } from '../../components/ui/States.jsx'
 import { AREAS, INTERESTS } from '../../lib/constants.js'
 import { checkInvite, joinWithInvite } from '../../lib/db.js'
@@ -12,7 +13,7 @@ import { getCurrentUser, setCurrentUser } from '../../lib/session.js'
 
 const STEPS = [
   { title: 'About you', intro: 'Tell the other women a little about yourself.' },
-  { title: 'Your interests', intro: 'Pick at least one. We use them to recommend events.' },
+  { title: 'Your interests', intro: 'Pick as many as you like. We use them to recommend events.' },
   { title: 'Your area', intro: 'Where in Barcelona are you based? We use it to show events near you.' },
 ]
 
@@ -49,7 +50,7 @@ export default function OnboardingPage() {
   if (invite.status === 'checking') {
     return (
       <>
-        <Header title="Join the community" back="/" />
+        <Header back="/" />
         <Loading label="Checking your invite code…" />
       </>
     )
@@ -58,7 +59,7 @@ export default function OnboardingPage() {
   if (invite.status === 'error') {
     return (
       <>
-        <Header title="Join the community" back="/" />
+        <Header back="/" />
         <ErrorState
           message={code ? invite.error : 'Start by entering your invite code.'}
           onRetry={
@@ -70,7 +71,7 @@ export default function OnboardingPage() {
               : undefined
           }
         />
-        <Button variant="ghost" icon={Home} to="/" className="self-center">
+        <Button variant="link" icon={Home} to="/" className="self-center">
           Back to the start
         </Button>
       </>
@@ -122,30 +123,30 @@ export default function OnboardingPage() {
 
   return (
     <form onSubmit={next} noValidate className="flex flex-1 flex-col">
-      <Header title="Join the community" onBack={back} />
+      <Header onBack={back} />
 
       {invite.owner && (
-        <p className="mb-4 flex items-center gap-2 rounded-2xl bg-accent-gold/15 px-4 py-3 text-sm text-accent-gold">
-          <BadgeCheck size={18} className="shrink-0" />
+        <p className="mb-5 flex items-center gap-2 rounded-2xl bg-soft px-4 py-3 text-soft-ink">
+          <BadgeCheck size={20} className="shrink-0" />
           You were vouched for by {invite.owner.name}
         </p>
       )}
 
       <div className="mb-6 flex flex-col gap-2">
-        <p className="text-sm text-text-main/60">
+        <Eyebrow>
           Step {step + 1} of {STEPS.length}
-        </p>
+        </Eyebrow>
         <div className="flex gap-1.5" aria-hidden="true">
           {STEPS.map((s, i) => (
-            <span key={s.title} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-primary' : 'bg-card'}`} />
+            <span key={s.title} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-primary' : 'bg-line'}`} />
           ))}
         </div>
-        <h2 className="mt-2 text-2xl font-bold">{STEPS[step].title}</h2>
-        <p className="text-text-main/70">{STEPS[step].intro}</p>
+        <h1 className="mt-3 font-display text-4xl leading-tight font-extrabold tracking-tight">{STEPS[step].title}</h1>
+        <p className="text-lg text-muted">{STEPS[step].intro}</p>
       </div>
 
       {step === 0 && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <Input
             label="First name"
             placeholder="e.g. Laura"
@@ -158,7 +159,7 @@ export default function OnboardingPage() {
           />
           <Input
             label="What do you do? (optional)"
-            placeholder="e.g. UX designer, student, career changer"
+            placeholder="e.g. UX designer, student"
             value={role}
             onChange={(e) => setRole(e.target.value)}
             maxLength={60}
@@ -169,49 +170,38 @@ export default function OnboardingPage() {
       {step === 1 && (
         <fieldset className="flex flex-col gap-3">
           <legend className="sr-only">Interests</legend>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {INTERESTS.map((tag) => (
-              <Chip
-                key={tag}
-                selected={interests.includes(tag)}
-                icon={interests.includes(tag) ? Check : undefined}
-                onClick={() => toggleInterest(tag)}
-              >
+              <Chip key={tag} selected={interests.includes(tag)} onClick={() => toggleInterest(tag)}>
                 {tag}
               </Chip>
             ))}
           </div>
-          {currentError && <p className="text-sm text-primary">{currentError}</p>}
+          {currentError && <p className="font-bold text-primary">{currentError}</p>}
         </fieldset>
       )}
 
       {step === 2 && (
         <fieldset className="flex flex-col gap-3">
           <legend className="sr-only">Area</legend>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {AREAS.map((a) => (
-              <Chip
-                key={a.name}
-                tone="pink"
-                selected={area === a.name}
-                icon={MapPin}
-                onClick={() => setArea(a.name)}
-              >
+              <Chip key={a.name} selected={area === a.name} onClick={() => setArea(a.name)}>
                 {a.name}
               </Chip>
             ))}
           </div>
-          {currentError && <p className="text-sm text-primary">{currentError}</p>}
+          {currentError && <p className="font-bold text-primary">{currentError}</p>}
         </fieldset>
       )}
 
       <div className="mt-auto flex flex-col gap-3 pt-8">
         {submitError && (
-          <p role="alert" className="text-center text-sm text-primary">
+          <p role="alert" className="text-center font-bold text-primary">
             {submitError}
           </p>
         )}
-        <Button full type="submit" loading={submitting} icon={isLast || submitting ? undefined : ArrowRight}>
+        <Button full size="lg" type="submit" loading={submitting} icon={isLast || submitting ? undefined : ArrowRight}>
           {isLast ? (submitting ? 'Creating your profile…' : 'Join and see events') : 'Next'}
         </Button>
       </div>
